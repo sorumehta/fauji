@@ -2,6 +2,7 @@
 #include "SimpleGameEngine.hpp"
 #include <cmath>
 #include <list>
+#include <memory>
 
 const float PI = 3.1415f;
 
@@ -16,6 +17,8 @@ public:
     float radius = 4.0f;
     bool bStable = false;
     float fFriction = 0.8f;
+    int nBounceBeforeDeath = -1;
+    bool bDead = false;
 
     cPhysicsObject(float x = 0.0f, float y = 0.0f): px(x), py(y) {}
 
@@ -24,7 +27,9 @@ public:
 
 class cDummy : public cPhysicsObject {
 public:
-    cDummy(float x = 0.0f, float y = 0.0f): cPhysicsObject(x, y) {}
+    cDummy(float x = 0.0f, float y = 0.0f): cPhysicsObject(x, y) {
+        radius = 16.0f;
+    }
 
     void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override {
         engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, std::atan2f(vy, vx), radius);
@@ -47,6 +52,41 @@ std::vector<std::pair<float, float>> defineDummy() {
 // out of line initialisation of static member
 std::vector<std::pair<float, float>> cDummy::vecModel = defineDummy();
 
+
+
+class cDebris : public cPhysicsObject {
+public:
+    cDebris(float x = 0.0f, float y = 0.0f): cPhysicsObject(x, y) {
+        // Set velocity to random direction and size for "boom" effect
+        vx = 10.0f * cosf(((float)rand() / (float)RAND_MAX) * 2.0f * PI);
+        vy = 10.0f * sinf(((float)rand() / (float)RAND_MAX) * 2.0f * PI);
+        radius = 1.0f;
+        fFriction = 0.8f;
+        nBounceBeforeDeath = 5;
+    }
+
+    void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override {
+        engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, std::atan2f(vy, vx), radius, {0x00, 0x64, 0x00});
+    }
+private:
+    // we want vecModel to be shared among all instances, so make it static
+    // since it is static, it must be initialised out of line
+    static std::vector<std::pair<float, float>> vecModel;
+};
+
+std::vector<std::pair<float, float>> defineDebris() {
+    // A small unit rectangle
+    std::vector<std::pair<float, float>> vecModel;
+    vecModel.push_back({ 0.0f, 0.0f });
+    vecModel.push_back({ 1.0f, 0.0f });
+    vecModel.push_back({ 1.0f, 1.0f });
+    vecModel.push_back({ 0.0f, 1.0f });
+    return vecModel;
+}
+// out of line initialisation of static member
+std::vector<std::pair<float, float>> cDebris::vecModel = defineDebris();
+
+
 class Fauji : public GameEngine {
 private:
     int nMapWidth = 1024;
@@ -55,7 +95,7 @@ private:
     float fCameraPosX = 0;
     float fCameraPosY = 0;
     float fMapScrollSpeed = 400.0f;
-    std::list<cPhysicsObject *> listObjects;
+    std::list<std::unique_ptr<cPhysicsObject>> listObjects;
 
 public:
     void onKeyboardEvent(int keycode, float secPerFrame) override {
@@ -76,9 +116,11 @@ public:
         }
         if(mouseEvent == SDL_MOUSEBUTTONDOWN){
             if(button == SDL_BUTTON_RIGHT){
-                cDummy *p = new cDummy(mousePosX + fCameraPosX, mousePosY + fCameraPosY);
-                p->radius = 16.0f;
-                listObjects.push_back(p);
+                listObjects.push_back(std::make_unique<cDummy>( mousePosX + fCameraPosX, mousePosY + fCameraPosY));
+            } else if(button == SDL_BUTTON_LEFT){
+                for(int i=0; i < 20; i++){
+                    listObjects.push_back(std::make_unique<cDebris>( mousePosX + fCameraPosX, mousePosY + fCameraPosY));
+                }
             }
         }
     }
@@ -99,7 +141,7 @@ public:
         for(int z=0; z < 10; z++) {
 
             // update physics of physical objects
-            for (auto obj: listObjects) {
+            for (auto &obj: listObjects) {
                 // apply gravity
                 obj->ay += 2.0f;
                 // update velocity
@@ -152,14 +194,25 @@ public:
                     obj->vx = obj->fFriction * ( obj->vx - 2.0f*fDdotN*fResponseX / fMagResponse );
                     obj->vy = obj->fFriction * ( obj->vy - 2.0f*fDdotN*fResponseY / fMagResponse );
 
-
+                    if(obj->nBounceBeforeDeath > 0){
+                        (obj->nBounceBeforeDeath)--;
+                        obj->bDead = obj->nBounceBeforeDeath == 0; // object is dead if no more bounces left
+                    }
                 } else{
+                    // we let an object update its position only when it is not colliding
                     obj->px = fPotentialX;
                     obj->py = fPotentialY;
                 }
                 // Turn off movement when tiny
                 if (fMagVelocity < 0.4f) obj->bStable = true;
             }
+
+            // remove dead objects from list
+            // Note that this function just removes the object, doesn't deallocate memory.
+            // That's why we use unique_pointer, so that removing the pointer also frees the memory.
+            // make sure to pass references to unique pointer in argument, since its copy constructor
+            // is explicitly disabled (for obvious reasons).
+            listObjects.remove_if([](std::unique_ptr<cPhysicsObject> &o){return o->bDead;});
         }
 
         // Draw landscape
@@ -170,7 +223,7 @@ public:
                     drawPoint(x, y, {0x00, 0xFF, 0xFF});
                     // draw sky
                 } else if(fMapVal == 1){
-                    // draw land 006400
+                    // draw land dark green 006400
                     drawPoint(x, y, {0x00, 0x64, 0x00});
                 }
             }
@@ -197,7 +250,7 @@ public:
             for(int x=0; x<nMapWidth; x++){
                 // if the current pixel in map is greater than corresponding pixel in noise output
                 // we set it to 1 (land) (y=0 is at top)
-                if(y > static_cast<int>( std::round(fSurface[x] * static_cast<float>(nMapHeight) )))
+                if(y > fSurface[x] * nMapHeight)
                 {
                     map[y * nMapWidth + x] = 1;
                 } else{
