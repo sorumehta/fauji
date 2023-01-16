@@ -118,9 +118,7 @@ public:
             if(button == SDL_BUTTON_RIGHT){
                 listObjects.push_back(std::make_unique<cDummy>( mousePosX + fCameraPosX, mousePosY + fCameraPosY));
             } else if(button == SDL_BUTTON_LEFT){
-                for(int i=0; i < 20; i++){
-                    listObjects.push_back(std::make_unique<cDebris>( mousePosX + fCameraPosX, mousePosY + fCameraPosY));
-                }
+                BOOM(mousePosX + fCameraPosX, mousePosY + fCameraPosY, 10.0f);
             }
         }
     }
@@ -234,6 +232,58 @@ public:
         }
 
         return true;
+    }
+
+    // create an explosion of a certain radius at a certain position in the world
+    void BOOM(float fWorldX, float fWorldY, float fRadius){
+        auto CircleBresenham = [&](int xc, int yc, int r)
+        {
+            // Taken from wikipedia
+            int x = 0;
+            int y = r;
+            int p = 3 - 2 * r;
+            if (!r) return;
+
+            // procedure to create sky along the line
+            auto drawSkyOnline = [&](int sx, int ex, int ny)
+            {
+                for (int i = sx; i < ex; i++)
+                    if (ny >= 0 && ny < nMapHeight && i >= 0 && i < nMapWidth)
+                        map[ny*nMapWidth + i] = 0;
+            };
+
+            while (y >= x)
+            {
+                // Modified to draw scan-lines instead of edges
+                drawSkyOnline(xc - x, xc + x, yc - y);
+                drawSkyOnline(xc - y, xc + y, yc - x);
+                drawSkyOnline(xc - x, xc + x, yc + y);
+                drawSkyOnline(xc - y, xc + y, yc + x);
+                if (p < 0) p += 4 * x++ + 6;
+                else p += 4 * (x++ - y--) + 10;
+            }
+        };
+
+        // Erase Terrain to form crater
+        CircleBresenham(fWorldX, fWorldY, fRadius);
+        // impact nearby bodies
+        for(auto &p : listObjects){
+            float dx = (p->px - fWorldX);
+            float dy = (p->py - fWorldY);
+            float fDist = std::sqrt(dx*dx + dy*dy);
+            if (fDist < 0.001f) fDist = 0.001f;
+            if (fDist < fRadius){
+                // now we have to apply force on the object, for which we change its velocity.
+                // the new velocity should be in the direction of the distance vector and inversely proportional to the distance
+                p->vx = (dx/fDist) * fRadius;
+                p->vy = (dy/fDist) * fRadius;
+                p->bStable = false;
+            }
+        }
+
+        for(int i=0; i < static_cast<int>(fRadius); i++){
+            listObjects.push_back(std::make_unique<cDebris>(fWorldX, fWorldY));
+        }
     }
 
     void createMap(){
