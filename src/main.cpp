@@ -1,4 +1,3 @@
-#include <iostream>
 #include "SimpleGameEngine.hpp"
 #include <cmath>
 #include <list>
@@ -23,6 +22,7 @@ public:
     cPhysicsObject(float x = 0.0f, float y = 0.0f): px(x), py(y) {}
 
     virtual void draw(GameEngine *engine, float fOffsetX, float fOffsetY) = 0;
+    virtual int ObjDeadAction() = 0;
 };
 
 class cDummy : public cPhysicsObject {
@@ -34,6 +34,9 @@ public:
     void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override {
         engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, std::atan2f(vy, vx), radius);
     }
+
+    int ObjDeadAction() override;
+
 private:
     // we want vecModel to be shared among all instances, so make it static
     // since it is static, it must be initialised out of line
@@ -52,6 +55,9 @@ std::vector<std::pair<float, float>> defineDummy() {
 // out of line initialisation of static member
 std::vector<std::pair<float, float>> cDummy::vecModel = defineDummy();
 
+int cDummy::ObjDeadAction() {
+    return 0;
+}
 
 
 class cDebris : public cPhysicsObject {
@@ -68,6 +74,9 @@ public:
     void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override {
         engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, std::atan2f(vy, vx), radius, {0x00, 0x64, 0x00});
     }
+
+    int ObjDeadAction() override;
+
 private:
     // we want vecModel to be shared among all instances, so make it static
     // since it is static, it must be initialised out of line
@@ -85,6 +94,97 @@ std::vector<std::pair<float, float>> defineDebris() {
 }
 // out of line initialisation of static member
 std::vector<std::pair<float, float>> cDebris::vecModel = defineDebris();
+
+int cDebris::ObjDeadAction() {
+    return 0;
+}
+
+
+class cMissile : public cPhysicsObject // A projectile weapon
+{
+public:
+    cMissile(float x = 0.0f, float y = 0.0f, float _vx = 0.0f, float _vy = 0.0f) : cPhysicsObject(x, y)
+    {
+        radius = 5.0f;
+        fFriction = 0.5f;
+        vx = _vx;
+        vy = _vy;
+        bDead = false;
+        nBounceBeforeDeath = 1;
+    }
+
+    virtual void draw(GameEngine *engine, float fOffsetX, float fOffsetY)
+    {
+        engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, atan2f(vy, vx), radius, {0xFF, 0, 0});
+    }
+
+    int ObjDeadAction() override;
+
+
+private:
+    static std::vector<std::pair<float, float>> vecModel;
+};
+
+int cMissile::ObjDeadAction() {
+    return 20;
+}
+
+std::vector<std::pair<float, float>> DefineMissile()
+{
+    // Defines a rocket like shape
+    std::vector<std::pair<float, float>> vecModel;
+    vecModel.push_back({ 0.0f, 0.0f });
+    vecModel.push_back({ 1.0f, 1.0f });
+    vecModel.push_back({ 2.0f, 1.0f });
+    vecModel.push_back({ 2.5f, 0.0f });
+    vecModel.push_back({ 2.0f, -1.0f });
+    vecModel.push_back({ 1.0f, -1.0f });
+    vecModel.push_back({ 0.0f, 0.0f });
+    vecModel.push_back({ -1.0f, -1.0f });
+    vecModel.push_back({ -2.5f, -1.0f });
+    vecModel.push_back({ -2.0f, 0.0f });
+    vecModel.push_back({ -2.5f, 1.0f });
+    vecModel.push_back({ -1.0f, 1.0f });
+
+    // Scale points to make shape unit sized
+    for (auto &v : vecModel)
+    {
+        v.first /= 2.5f; v.second /= 2.5f;
+    }
+    return vecModel;
+}
+std::vector<std::pair<float, float>> cMissile::vecModel = DefineMissile();
+
+class cSoldier : public cPhysicsObject {
+public:
+    cSoldier(float x, float y): cPhysicsObject(x, y) {
+        fFriction = 0.2f;
+        radius = 3.5f;
+        bDead = false;
+        nBounceBeforeDeath = -1;
+        if(spritePtr == nullptr){
+            spritePtr = new LTexture();
+            spritePtr->loadTextureFromFile("../res/foo.png");
+        }
+    }
+
+    int ObjDeadAction() override;
+
+    void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override;
+
+private:
+    static LTexture *spritePtr; // shared across instances
+};
+
+LTexture *cSoldier::spritePtr = nullptr;
+
+void cSoldier::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
+    spritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius);
+}
+
+int cSoldier::ObjDeadAction() {
+    return 0;
+}
 
 
 class Fauji : public GameEngine {
@@ -116,9 +216,9 @@ public:
         }
         if(mouseEvent == SDL_MOUSEBUTTONDOWN){
             if(button == SDL_BUTTON_RIGHT){
-                listObjects.push_back(std::make_unique<cDummy>( mousePosX + fCameraPosX, mousePosY + fCameraPosY));
+                listObjects.push_back(std::make_unique<cMissile>(mousePosX + fCameraPosX, mousePosY + fCameraPosY));
             } else if(button == SDL_BUTTON_LEFT){
-                BOOM(mousePosX + fCameraPosX, mousePosY + fCameraPosY, 10.0f);
+                listObjects.push_back(std::make_unique<cSoldier>(mousePosX + fCameraPosX, mousePosY + fCameraPosY));
             }
         }
     }
@@ -195,6 +295,12 @@ public:
                     if(obj->nBounceBeforeDeath > 0){
                         (obj->nBounceBeforeDeath)--;
                         obj->bDead = obj->nBounceBeforeDeath == 0; // object is dead if no more bounces left
+                        if(obj->bDead){
+                            int nResponse = obj->ObjDeadAction();
+                            if(nResponse > 0){
+                                BOOM(obj->px, obj->py, nResponse);
+                            }
+                        }
                     }
                 } else{
                     // we let an object update its position only when it is not colliding
@@ -245,7 +351,7 @@ public:
             if (!r) return;
 
             // procedure to create sky along the line
-            auto drawSkyOnline = [&](int sx, int ex, int ny)
+            auto drawSkyline = [&](int sx, int ex, int ny)
             {
                 for (int i = sx; i < ex; i++)
                     if (ny >= 0 && ny < nMapHeight && i >= 0 && i < nMapWidth)
@@ -255,10 +361,10 @@ public:
             while (y >= x)
             {
                 // Modified to draw scan-lines instead of edges
-                drawSkyOnline(xc - x, xc + x, yc - y);
-                drawSkyOnline(xc - y, xc + y, yc - x);
-                drawSkyOnline(xc - x, xc + x, yc + y);
-                drawSkyOnline(xc - y, xc + y, yc + x);
+                drawSkyline(xc - x, xc + x, yc - y);
+                drawSkyline(xc - y, xc + y, yc - x);
+                drawSkyline(xc - x, xc + x, yc + y);
+                drawSkyline(xc - y, xc + y, yc + x);
                 if (p < 0) p += 4 * x++ + 6;
                 else p += 4 * (x++ - y--) + 10;
             }

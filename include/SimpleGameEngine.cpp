@@ -17,9 +17,9 @@ int LTexture::getHeight() const { return mHeight; }
 
 int LTexture::getWidth() const { return mWidth; }
 
-void LTexture::render(SDL_Renderer *renderer, int x, int y) {
+void LTexture::drawTexture(int x, int y) {
     SDL_Rect rect = {x, y, mWidth, mHeight};
-    SDL_RenderCopy(renderer, mTexture, NULL, &rect);
+    SDL_RenderCopy(gRenderer, mTexture, NULL, &rect);
 }
 
 void LTexture::free() {
@@ -60,14 +60,63 @@ bool LTexture::loadTextureFromText(const std::string &text, SDL_Color color) {
     return true;
 }
 
+bool LTexture::loadTextureFromFile(std::string path) {
+
+        //Get rid of preexisting texture
+        free();
+
+        //The final texture
+        SDL_Texture* newTexture = NULL;
+
+        //Load image at specified path
+        SDL_Surface* loadedSurface = IMG_Load( path.c_str() );
+        if( loadedSurface == NULL )
+        {
+            std::cout <<  "Unable to load image " <<  path <<" SDL_image Error: \n" << IMG_GetError() << std::endl ;
+        }
+        else
+        {
+            //Color key image
+            SDL_SetColorKey( loadedSurface, SDL_TRUE, SDL_MapRGB( loadedSurface->format, 0, 0xFF, 0xFF ) );
+
+            //Create texture from surface pixels
+            newTexture = SDL_CreateTextureFromSurface( gRenderer, loadedSurface );
+            if( newTexture == NULL )
+            {
+                std::cout <<  "Unable to create texture from" <<  path << "SDL Error: %s\n" << SDL_GetError() << std::endl;
+            }
+            else
+            {
+                //Get image dimensions
+                mWidth = loadedSurface->w;
+                mHeight = loadedSurface->h;
+            }
+
+            //Get rid of old loaded surface
+            SDL_FreeSurface( loadedSurface );
+        }
+
+        //Return success
+        mTexture = newTexture;
+        return mTexture != NULL;
+
+}
+
 
 GameEngine::GameEngine(): mWindowWidth(80), mWindowHeight(40), gWindow(nullptr){
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         std::cout << "SDL initialization failed: " << SDL_GetError();
     }
+    // initialise font loading
     if (TTF_Init() == -1) {
         std::cout << "SDL_ttf could not initialize! SDL_ttf Error:" << TTF_GetError();
         return;
+    }
+    //Initialize PNG loading
+    int imgFlags = IMG_INIT_PNG;
+    if( !( IMG_Init( imgFlags ) & imgFlags ) )
+    {
+        std::cout << "SDL_image could not initialize! SDL_image Error: \n" << IMG_GetError() << std::endl;
     }
 }
 
@@ -150,7 +199,6 @@ void GameEngine::close_sdl() {
 
     //Quit SDL subsystems
     SDL_Quit();
-
 }
 
 void GameEngine::initScreen() {
@@ -210,17 +258,10 @@ void GameEngine::startGameLoop() {
     }
 }
 
-void GameEngine::onKeyboardEvent(int keycode, float secPerFrame) {
-}
+void GameEngine::onKeyboardEvent(int keycode, float secPerFrame) {}
 
 void
 GameEngine::onMouseEvent(int posX, int posY, float secPerFrame, unsigned int mouseState, unsigned char button) {}
-
-bool GameEngine::drawString(int x, int y, const std::string& text) {
-    texture.loadTextureFromText(text, {0xFF, 0xFF, 0xFF});
-    texture.render(gRenderer, x, y);
-    return true;
-}
 
 // Draws a model on screen with the given rotation(r), translation(x, y) and scaling(s)
 void GameEngine::DrawWireFrameModel(const std::vector<std::pair<float, float>> &vecModelCoordinates, float x, float y, float r, float s, Color color)

@@ -8,7 +8,7 @@ add_compile_options(-Wall)
 add_library(console-game-engine
         include/SimpleGameEngine.hpp
         include/SimpleGameEngine.cpp)
-target_link_libraries(console-game-engine -lSDL2 -lSDL2_ttf)
+target_link_libraries(console-game-engine -lSDL2 -lSDL2_ttf -lSDL2_image)
 target_link_libraries(console-game-engine -L/opt/homebrew/lib/)
 add_executable(Fauji src/main.cpp)
 target_link_libraries(Fauji console-game-engine)

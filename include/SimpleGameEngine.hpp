@@ -2,6 +2,7 @@
 
 #include <SDL.h>
 #include <SDL_ttf.h>
+#include <SDL_image.h>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -20,7 +21,9 @@ public:
 
     bool loadTextureFromText(const std::string& text, SDL_Color color);
 
-    void render(SDL_Renderer *renderer, int x, int y);
+    bool loadTextureFromFile( std::string path );
+
+    void drawTexture( int x, int y);
 
     int getWidth() const;
 
@@ -51,7 +54,6 @@ protected:
 private:
     void initScreen();
     SDL_Window *gWindow = nullptr;
-    LTexture texture;
 public:
     GameEngine();
 
@@ -67,8 +69,6 @@ public:
     virtual bool drawPoint(int x, int y, Color color = {0xFF, 0xFF, 0xFF});
 
     bool drawLine(int x1, int y1, int x2, int y2, Color color = {0xFF, 0xFF, 0xFF});
-
-    bool drawString(int x, int y, const std::string& text);
 
     void DrawWireFrameModel(const std::vector<std::pair<float, float>> &vecModelCoordinates, float x, float y, float r = 0.0f, float s = 1.0f, Color color = {0xFF, 0xFF, 0xFF});
 
