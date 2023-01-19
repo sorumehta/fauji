@@ -157,11 +157,12 @@ std::vector<std::pair<float, float>> cMissile::vecModel = DefineMissile();
 
 class cSoldier : public cPhysicsObject {
 public:
-    cSoldier(float x, float y): cPhysicsObject(x, y) {
+    cSoldier(float x, float y): cPhysicsObject(x, y){
         fFriction = 0.2f;
-        radius = 3.5f;
+        radius = 16.0f;
         bDead = false;
         nBounceBeforeDeath = -1;
+        flipType = SDL_FLIP_NONE;
         if(spritePtr == nullptr){
             spritePtr = new LTexture();
             spritePtr->loadTextureFromFile("../res/foo.png");
@@ -174,12 +175,15 @@ public:
 
 private:
     static LTexture *spritePtr; // shared across instances
+    //Flip type
+    SDL_RendererFlip flipType;
 };
 
 LTexture *cSoldier::spritePtr = nullptr;
 
 void cSoldier::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
-    spritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius);
+    SDL_Rect clip = {0, 0, 64, 205};
+    spritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius, radius*2, radius*2, &clip, 0, NULL, flipType);
 }
 
 int cSoldier::ObjDeadAction() {

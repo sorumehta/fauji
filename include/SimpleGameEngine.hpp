@@ -23,7 +23,8 @@ public:
 
     bool loadTextureFromFile( std::string path );
 
-    void drawTexture( int x, int y);
+    void drawTexture( int x, int y, int w = 0, int h = 0, SDL_Rect* clip = NULL,
+                      double angle = 0.0, SDL_Point* center = NULL, SDL_RendererFlip flip = SDL_FLIP_NONE );
 
     int getWidth() const;
 
