@@ -2,11 +2,12 @@
 #include <cmath>
 
 const int FONT_SIZE = 18;
-const int FONT_WIDTH = 10;
-const int FONT_HEIGHT = 18;
+//const int FONT_WIDTH = 10;
+//const int FONT_HEIGHT = 18;
 
 SDL_Renderer *gRenderer = nullptr;
 TTF_Font *gFont = NULL;
+
 LTexture::LTexture() {
     mTexture = nullptr;
     mWidth = 0;
@@ -17,25 +18,24 @@ int LTexture::getHeight() const { return mHeight; }
 
 int LTexture::getWidth() const { return mWidth; }
 
-void LTexture::drawTexture( int x, int y, int w, int h, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip )
-{
+void LTexture::drawTexture(int x, int y, int w, int h, SDL_Rect *clip, double angle, SDL_Point *center,
+                           SDL_RendererFlip flip) {
     //Set rendering space and render to screen
-    SDL_Rect renderQuad = { x, y, mWidth, mHeight };
+    SDL_Rect renderQuad = {x, y, mWidth, mHeight};
 
 
-    if(w != 0 && h != 0){
+    if (w != 0 && h != 0) {
         renderQuad.w = w;
         renderQuad.h = h;
     }
-    //Set clip rendering dimensions
-    else if( clip != NULL )
-    {
+        //Set clip rendering dimensions
+    else if (clip != NULL) {
         renderQuad.w = clip->w;
         renderQuad.h = clip->h;
     }
 
     //Render to screen
-    SDL_RenderCopyEx( gRenderer, mTexture, clip, &renderQuad, angle, center, flip );
+    SDL_RenderCopyEx(gRenderer, mTexture, clip, &renderQuad, angle, center, flip);
 }
 
 void LTexture::free() {
@@ -53,7 +53,7 @@ LTexture::~LTexture() {
 }
 
 bool LTexture::loadTextureFromText(const std::string &text, SDL_Color color) {
-    if(text.length() == 0){
+    if (text.length() == 0) {
         // nothing to render
         return true;
     }
@@ -78,48 +78,42 @@ bool LTexture::loadTextureFromText(const std::string &text, SDL_Color color) {
 
 bool LTexture::loadTextureFromFile(std::string path) {
 
-        //Get rid of preexisting texture
-        free();
+    //Get rid of preexisting texture
+    free();
 
-        //The final texture
-        SDL_Texture* newTexture = NULL;
+    //The final texture
+    SDL_Texture *newTexture = NULL;
 
-        //Load image at specified path
-        SDL_Surface* loadedSurface = IMG_Load( path.c_str() );
-        if( loadedSurface == NULL )
-        {
-            std::cout <<  "Unable to load image " <<  path <<" SDL_image Error: \n" << IMG_GetError() << std::endl ;
-        }
-        else
-        {
-            //Color key image
-            SDL_SetColorKey( loadedSurface, SDL_TRUE, SDL_MapRGB( loadedSurface->format, 0, 0xFF, 0xFF ) );
+    //Load image at specified path
+    SDL_Surface *loadedSurface = IMG_Load(path.c_str());
+    if (loadedSurface == NULL) {
+        std::cout << "Unable to load image " << path << " SDL_image Error: \n" << IMG_GetError() << std::endl;
+    } else {
+        //Color key image
+        SDL_SetColorKey(loadedSurface, SDL_TRUE, SDL_MapRGB(loadedSurface->format, 0, 0xFF, 0xFF));
 
-            //Create texture from surface pixels
-            newTexture = SDL_CreateTextureFromSurface( gRenderer, loadedSurface );
-            if( newTexture == NULL )
-            {
-                std::cout <<  "Unable to create texture from" <<  path << "SDL Error: %s\n" << SDL_GetError() << std::endl;
-            }
-            else
-            {
-                //Get image dimensions
-                mWidth = loadedSurface->w;
-                mHeight = loadedSurface->h;
-            }
-
-            //Get rid of old loaded surface
-            SDL_FreeSurface( loadedSurface );
+        //Create texture from surface pixels
+        newTexture = SDL_CreateTextureFromSurface(gRenderer, loadedSurface);
+        if (newTexture == NULL) {
+            std::cout << "Unable to create texture from" << path << "SDL Error: %s\n" << SDL_GetError() << std::endl;
+        } else {
+            //Get image dimensions
+            mWidth = loadedSurface->w;
+            mHeight = loadedSurface->h;
         }
 
-        //Return success
-        mTexture = newTexture;
-        return mTexture != NULL;
+        //Get rid of old loaded surface
+        SDL_FreeSurface(loadedSurface);
+    }
+
+    //Return success
+    mTexture = newTexture;
+    return mTexture != NULL;
 
 }
 
 
-GameEngine::GameEngine(): mWindowWidth(80), mWindowHeight(40), gWindow(nullptr){
+GameEngine::GameEngine() : mWindowWidth(80), mWindowHeight(40), gWindow(nullptr) {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         std::cout << "SDL initialization failed: " << SDL_GetError();
     }
@@ -130,8 +124,7 @@ GameEngine::GameEngine(): mWindowWidth(80), mWindowHeight(40), gWindow(nullptr){
     }
     //Initialize PNG loading
     int imgFlags = IMG_INIT_PNG;
-    if( !( IMG_Init( imgFlags ) & imgFlags ) )
-    {
+    if (!(IMG_Init(imgFlags) & imgFlags)) {
         std::cout << "SDL_image could not initialize! SDL_image Error: \n" << IMG_GetError() << std::endl;
     }
 }
@@ -140,12 +133,12 @@ GameEngine::~GameEngine() {
     close_sdl();
 }
 
-bool GameEngine::constructConsole(int windowWidth = 80, int windowHeight = 40, const char * title = "Window") {
+bool GameEngine::constructConsole(int windowWidth = 80, int windowHeight = 40, const char *title = "Window") {
     SDL_DisplayMode DM;
     SDL_GetCurrentDisplayMode(0, &DM);
     int maxWidth = DM.w;
     int maxHeight = DM.h;
-    if(windowWidth > maxWidth || windowHeight > maxHeight){
+    if (windowWidth > maxWidth || windowHeight > maxHeight) {
         std::cout << "Window size too large! ";
         std::cout << "maxWidth = " << maxWidth << ", maxHeight = " << maxHeight << std::endl;
         return false;
@@ -180,7 +173,7 @@ bool GameEngine::createResources() {
 }
 
 bool GameEngine::renderConsole() {
-    if(gRenderer == nullptr){
+    if (gRenderer == nullptr) {
         std::cout << "Renderer is not initialised. Perhaps you forgot to call constructConsole?" << std::endl;
         return false;
     }
@@ -189,9 +182,9 @@ bool GameEngine::renderConsole() {
     return true;
 }
 
-bool GameEngine::drawLine(int x1, int y1, int x2, int y2, Color color ) {
+bool GameEngine::drawLine(int x1, int y1, int x2, int y2, Color color) {
     SDL_SetRenderDrawColor(gRenderer, color.r, color.g, color.b, SDL_ALPHA_OPAQUE);
-    if(SDL_RenderDrawLine( gRenderer, x1, y1, x2, y2 ) != 0){
+    if (SDL_RenderDrawLine(gRenderer, x1, y1, x2, y2) != 0) {
         return false;
     }
     return true;
@@ -199,7 +192,7 @@ bool GameEngine::drawLine(int x1, int y1, int x2, int y2, Color color ) {
 
 bool GameEngine::drawPoint(int x, int y, Color color) {
     SDL_SetRenderDrawColor(gRenderer, color.r, color.g, color.b, SDL_ALPHA_OPAQUE);
-    if(SDL_RenderDrawPoint( gRenderer, x, y ) != 0){
+    if (SDL_RenderDrawPoint(gRenderer, x, y) != 0) {
         return false;
     }
     return true;
@@ -231,14 +224,14 @@ void GameEngine::startGameLoop() {
         quit = true;
     }
     initScreen();
-    if (!onInit()){
+    if (!onInit()) {
         std::cout << "onInit function returned error" << std::endl;
         quit = true;
     }
     auto prevFrameTime = std::chrono::system_clock::now();
     auto currFrameTime = std::chrono::system_clock::now();
 
-    while(!quit){
+    while (!quit) {
         // handle timing
         currFrameTime = std::chrono::system_clock::now();
         std::chrono::duration<float> elapsedTime = currFrameTime - prevFrameTime;
@@ -251,16 +244,21 @@ void GameEngine::startGameLoop() {
             //User requests quit
             if (e.type == SDL_QUIT) {
                 quit = true;
-            } else if(e.type == SDL_KEYDOWN) {
-                onKeyboardEvent(e.key.keysym.sym, frameElapsedTime);
-            } else if(e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION){
-                int x, y;
-                SDL_GetMouseState( &x, &y );
-                onMouseEvent(x, y, frameElapsedTime, e.type, e.button.button);
+            } else if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP || e.type == SDL_MOUSEBUTTONDOWN ||
+                       e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION) {
+                int mouseX, mouseY;
+                SDL_GetMouseState(&mouseX, &mouseY);
+                int buttonCode;
+                if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) {
+                    buttonCode = e.key.keysym.sym;
+                } else {
+                    buttonCode = e.button.button;
+                }
+                InputEventHandler::runCallbacks(e.type, buttonCode, mouseX, mouseY, frameElapsedTime);
+//                onKeyboardEvent(e.key.keysym.sym, frameElapsedTime);
             }
-
         }
-        if(!onFrameUpdate(frameElapsedTime)){
+        if (!onFrameUpdate(frameElapsedTime)) {
             quit = true;
         }
 
@@ -274,14 +272,9 @@ void GameEngine::startGameLoop() {
     }
 }
 
-void GameEngine::onKeyboardEvent(int keycode, float secPerFrame) {}
-
-void
-GameEngine::onMouseEvent(int posX, int posY, float secPerFrame, unsigned int mouseState, unsigned char button) {}
-
 // Draws a model on screen with the given rotation(r), translation(x, y) and scaling(s)
-void GameEngine::DrawWireFrameModel(const std::vector<std::pair<float, float>> &vecModelCoordinates, float x, float y, float r, float s, Color color)
-{
+void GameEngine::DrawWireFrameModel(const std::vector<std::pair<float, float>> &vecModelCoordinates, float x, float y,
+                                    float r, float s, Color color) {
     // std::pair.first = x coordinate
     // std::pair.second = y coordinate
 
@@ -300,31 +293,57 @@ void GameEngine::DrawWireFrameModel(const std::vector<std::pair<float, float>> &
     // we can also represent these equations using a matrix multiplication
     // [P2_x] = [cos(A)  -sin(A)] [P1_x]
     // [P2_y] = [sin(A)   cos(A)] [P1_y]
-    for (int i = 0; i < verts; i++)
-    {
-        vecTransformedCoordinates[i].first = vecModelCoordinates[i].first * std::cos(r) - vecModelCoordinates[i].second * std::sin(r);
-        vecTransformedCoordinates[i].second = vecModelCoordinates[i].first * std::sin(r) + vecModelCoordinates[i].second * std::cos(r);
+    for (int i = 0; i < verts; i++) {
+        vecTransformedCoordinates[i].first =
+                vecModelCoordinates[i].first * std::cos(r) - vecModelCoordinates[i].second * std::sin(r);
+        vecTransformedCoordinates[i].second =
+                vecModelCoordinates[i].first * std::sin(r) + vecModelCoordinates[i].second * std::cos(r);
     }
 
     // Scale
-    for (int i = 0; i < verts; i++)
-    {
+    for (int i = 0; i < verts; i++) {
         vecTransformedCoordinates[i].first = vecTransformedCoordinates[i].first * s;
         vecTransformedCoordinates[i].second = vecTransformedCoordinates[i].second * s;
     }
 
     // Translate
-    for (int i = 0; i < verts; i++)
-    {
+    for (int i = 0; i < verts; i++) {
         vecTransformedCoordinates[i].first = vecTransformedCoordinates[i].first + x;
         vecTransformedCoordinates[i].second = vecTransformedCoordinates[i].second + y;
     }
 
     // Draw Closed Polygon
-    for (int i = 0; i < verts + 1; i++)
-    {
+    for (int i = 0; i < verts + 1; i++) {
         int j = (i + 1);
-        drawLine(static_cast<int>(std::round(vecTransformedCoordinates[i % verts].first)), static_cast<int>(std::round(vecTransformedCoordinates[i % verts].second)),
-                 static_cast<int>(std::round(vecTransformedCoordinates[j % verts].first)), static_cast<int>(std::round(vecTransformedCoordinates[j % verts].second)), color);
+        drawLine(static_cast<int>(std::round(vecTransformedCoordinates[i % verts].first)),
+                 static_cast<int>(std::round(vecTransformedCoordinates[i % verts].second)),
+                 static_cast<int>(std::round(vecTransformedCoordinates[j % verts].first)),
+                 static_cast<int>(std::round(vecTransformedCoordinates[j % verts].second)), color);
     }
 }
+
+void InputEventHandler::addCallback(const std::string &cb_name, const KeyEventFuncPtr &fn) {
+    m_callbacks.emplace_back(cb_name, fn);
+}
+
+void InputEventHandler::reset() {
+    m_callbacks.clear();
+}
+
+void InputEventHandler::runCallbacks(int eventType, int buttonCode, int mousePosX, int mousePosY, float secPerFrame) {
+    for (const auto &cbptr: m_callbacks) {
+        cbptr.second(eventType, buttonCode, mousePosX, mousePosY, secPerFrame);
+    }
+}
+
+void InputEventHandler::removeCallback(const std::string &cb_name) {
+    auto it = std::remove_if(m_callbacks.begin(), m_callbacks.end(),
+                             [&](const std::pair<std::string, KeyEventFuncPtr> &cbPair) -> bool {
+                                 return cbPair.first == cb_name;
+                             });
+    if (it != m_callbacks.end()) {
+        m_callbacks.erase(it);
+    }
+}
+
+std::vector<std::pair<std::string, KeyEventFuncPtr>> InputEventHandler::m_callbacks;
