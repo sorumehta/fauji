@@ -159,7 +159,7 @@ std::vector<std::pair<float, float>> DefineMissile() {
 std::vector<std::pair<float, float>> cMissile::vecModel = DefineMissile();
 
 
-class cSoldier : public cPhysicsObject {
+class cMan : public cPhysicsObject {
 public:
     SDL_RendererFlip flipType;
 
@@ -195,7 +195,7 @@ public:
         spriteClips[3].h = 205;
     }
 
-    cSoldier(float x, float y) : cPhysicsObject(x, y) {
+    cMan(float x, float y) : cPhysicsObject(x, y) {
         fFriction = 0.2f;
         radius = 16.0f;
         bDead = false;
@@ -205,7 +205,7 @@ public:
         auto onUserInputFn = [this](int eventType, int buttonCode, int mousePosX, int mousePosY, float secPerFrame) {
             flipObject(eventType, buttonCode, mousePosX, mousePosY, secPerFrame);
         };
-        InputEventHandler::addCallback("onUserInputFn_Soldier", onUserInputFn);
+        InputEventHandler::addCallback("onUserInputFn_Man", onUserInputFn);
         if (spritePtr == nullptr) {
             spritePtr = new LTexture();
             spritePtr->loadTextureFromFile("../res/foo.png");
@@ -222,9 +222,9 @@ private:
     int frame;
 };
 
-LTexture *cSoldier::spritePtr = nullptr;
+LTexture *cMan::spritePtr = nullptr;
 
-void cSoldier::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
+void cMan::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
     SDL_Rect *currentClip = &spriteClips[frame / 2];
     if (vx < 3) {
         currentClip = &spriteClips[0];
@@ -237,7 +237,7 @@ void cSoldier::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
     }
 }
 
-int cSoldier::ObjDeadAction() {
+int cMan::ObjDeadAction() {
     return 0;
 }
 
@@ -250,6 +250,7 @@ private:
     float fCameraPosY = 0;
     float fMapScrollSpeed = 400.0f;
     std::list<std::unique_ptr<cPhysicsObject>> listObjects;
+    cPhysicsObject *pObjectUnderControl = nullptr;
 
 public:
     void onUserInputEvent(int eventType, int button, int mousePosX, int mousePosY, float secPerFrame) {
@@ -268,7 +269,9 @@ public:
             if (button == SDL_BUTTON_RIGHT) {
                 listObjects.push_back(std::make_unique<cMissile>(mousePosX + fCameraPosX, mousePosY + fCameraPosY));
             } else if (button == SDL_BUTTON_LEFT) {
-                listObjects.push_back(std::make_unique<cSoldier>(mousePosX + fCameraPosX, mousePosY + fCameraPosY));
+                cMan *man = new cMan(mousePosX + fCameraPosX, mousePosY + fCameraPosY);
+                pObjectUnderControl = man;
+                listObjects.push_back(std::unique_ptr<cMan>(man));
             }
         }
     }
@@ -299,7 +302,7 @@ public:
                 obj->vx += obj->ax * fElapsedTime;
                 obj->vy += obj->ay * fElapsedTime;
 
-                cSoldier *sol = new cSoldier(0, 0);
+                cMan *sol = new cMan(0, 0);
 
                 // update positions
                 float fPotentialX = obj->px + obj->vx * fElapsedTime;
