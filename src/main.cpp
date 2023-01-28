@@ -3,7 +3,7 @@
 #include <list>
 #include <memory>
 
-const float PI = 3.1415f;
+const float PI = 3.14159f;
 
 class cPhysicsObject {
 public:
@@ -117,7 +117,7 @@ public:
         nBounceBeforeDeath = 1;
     }
 
-    virtual void draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
+    virtual void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override {
         engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, atan2f(vy, vx), radius, {0xFF, 0, 0});
     }
 
@@ -162,17 +162,7 @@ std::vector<std::pair<float, float>> cMissile::vecModel = DefineMissile();
 class cMan : public cPhysicsObject {
 public:
     SDL_RendererFlip flipType;
-
-    void flipObject(int eventType, int buttonCode, int mousePosX, int mousePosY, float secPerFrame) {
-        if (eventType == SDL_KEYDOWN) {
-            if (buttonCode == SDLK_RIGHT) {
-                flipType = SDL_FLIP_HORIZONTAL;
-            } else if (buttonCode == SDLK_LEFT) {
-                flipType = SDL_FLIP_NONE;
-            }
-        }
-    }
-
+    float fShootingAngle;
     void initSpriteClips() {
         spriteClips[0].x = 0;
         spriteClips[0].y = 0;
@@ -202,10 +192,7 @@ public:
         nBounceBeforeDeath = -1;
         initSpriteClips();
         frame = 0;
-        auto onUserInputFn = [this](int eventType, int buttonCode, int mousePosX, int mousePosY, float secPerFrame) {
-            flipObject(eventType, buttonCode, mousePosX, mousePosY, secPerFrame);
-        };
-        InputEventHandler::addCallback("onUserInputFn_Man", onUserInputFn);
+        fShootingAngle = flipType == SDL_FLIP_NONE ? -PI : PI;
         if (spritePtr == nullptr) {
             spritePtr = new LTexture();
             spritePtr->loadTextureFromFile("../res/foo.png");
@@ -226,7 +213,7 @@ LTexture *cMan::spritePtr = nullptr;
 
 void cMan::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
     SDL_Rect *currentClip = &spriteClips[frame / 2];
-    if (vx < 3) {
+    if (std::abs(vx) < 3) {
         currentClip = &spriteClips[0];
     }
     spritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius, radius * 2, radius * 2, currentClip, 0, NULL,
@@ -251,6 +238,7 @@ private:
     float fMapScrollSpeed = 400.0f;
     std::list<std::unique_ptr<cPhysicsObject>> listObjects;
     cPhysicsObject *pObjectUnderControl = nullptr;
+    cPhysicsObject *pCameraTrackingObject = nullptr;
 
 public:
     void onUserInputEvent(int eventType, int button, int mousePosX, int mousePosY, float secPerFrame) {
@@ -259,11 +247,7 @@ public:
             if (mousePosX > mWindowWidth - 15) fCameraPosX += fMapScrollSpeed * secPerFrame;
             if (mousePosY < 15) fCameraPosY -= fMapScrollSpeed * secPerFrame;
             if (mousePosY > mWindowHeight - 15) fCameraPosY += fMapScrollSpeed * secPerFrame;
-            // Clamp map boundaries
-            if (fCameraPosX < 0) fCameraPosX = 0;
-            if (fCameraPosX >= nMapWidth - mWindowWidth) fCameraPosX = nMapWidth - mWindowWidth;
-            if (fCameraPosY < 0) fCameraPosY = 0;
-            if (fCameraPosY >= nMapHeight - mWindowHeight) fCameraPosY = nMapHeight - mWindowHeight;
+
         }
         if (eventType == SDL_MOUSEBUTTONDOWN) {
             if (button == SDL_BUTTON_RIGHT) {
@@ -271,7 +255,36 @@ public:
             } else if (button == SDL_BUTTON_LEFT) {
                 cMan *man = new cMan(mousePosX + fCameraPosX, mousePosY + fCameraPosY);
                 pObjectUnderControl = man;
+                pCameraTrackingObject = man;
                 listObjects.push_back(std::unique_ptr<cMan>(man));
+            }
+        }
+        if (eventType == SDL_KEYDOWN) {
+            if(pObjectUnderControl != nullptr){
+                if(pObjectUnderControl->bStable){
+                    cMan *pMan = dynamic_cast<cMan *>(pObjectUnderControl);
+                    if (button == SDLK_RIGHT) {
+                        pMan->vx = 5.0f;
+                        pMan->vy = -5.0f;
+                        pMan->flipType = SDL_FLIP_HORIZONTAL;
+                        pMan->bStable = false;
+                    } else if (button == SDLK_LEFT) {
+                        pMan->vx = -5.0f;
+                        pMan->vy = -5.0f;
+                        pMan->flipType = SDL_FLIP_NONE;
+                        pMan->bStable = false;
+                    } else if (button == SDLK_a){
+                        pMan->fShootingAngle -= 1.0f * secPerFrame;
+                        if(pMan->fShootingAngle < -PI){
+                            pMan->fShootingAngle = PI;
+                        }
+                    } else if (button == SDLK_s){
+                        pMan->fShootingAngle += 1.0f * secPerFrame;
+                        if(pMan->fShootingAngle > PI){
+                            pMan->fShootingAngle = -PI;
+                        }
+                    }
+                }
             }
         }
     }
@@ -288,6 +301,16 @@ public:
         InputEventHandler::addCallback("onUserInputFn_Game", onUserInputFn);
         return true;
     }
+    
+    void drawPlayerAim(int cx, int cy){
+        drawPoint(cx, cy, {0, 0, 0});
+        drawPoint(cx-1, cy, {0, 0, 0});
+        drawPoint(cx, cy-1, {0, 0, 0});
+        drawPoint(cx+1, cy, {0, 0, 0});
+        drawPoint(cx, cy+1, {0, 0, 0});
+
+
+    }
 
     bool onFrameUpdate(float fElapsedTime) override {
 
@@ -301,8 +324,6 @@ public:
                 // update velocity
                 obj->vx += obj->ax * fElapsedTime;
                 obj->vy += obj->ay * fElapsedTime;
-
-                cMan *sol = new cMan(0, 0);
 
                 // update positions
                 float fPotentialX = obj->px + obj->vx * fElapsedTime;
@@ -378,6 +399,16 @@ public:
             // is explicitly disabled (for obvious reasons).
             listObjects.remove_if([](std::unique_ptr<cPhysicsObject> &o) { return o->bDead; });
         }
+        // Buggy code
+//        if(pCameraTrackingObject != nullptr){
+//            fCameraPosX = pCameraTrackingObject->px - mWindowWidth/2;
+//            fCameraPosY = pCameraTrackingObject->py - mWindowHeight/2;
+//        }
+
+        if (fCameraPosX < 0) fCameraPosX = 0;
+        if (fCameraPosX >= nMapWidth - mWindowWidth) fCameraPosX = nMapWidth - mWindowWidth;
+        if (fCameraPosY < 0) fCameraPosY = 0;
+        if (fCameraPosY >= nMapHeight - mWindowHeight) fCameraPosY = nMapHeight - mWindowHeight;
 
         // Draw landscape
         for (int y = 0; y < mWindowHeight; y++) {
@@ -392,10 +423,19 @@ public:
                 }
             }
         }
-
+        // draw objects
         for (auto &p: listObjects) {
             p->draw(this, fCameraPosX, fCameraPosY);
         }
+        // draw a shooting aim near the man in control
+        if(pObjectUnderControl != nullptr){
+            cMan *pMan = dynamic_cast<cMan *>(pObjectUnderControl);
+            const int aimLength = 30.0f;
+            int cx = static_cast<int>(aimLength * std::cos(pMan->fShootingAngle) + pMan->px - fCameraPosX);
+            int cy = static_cast<int>(aimLength * std::sin(pMan->fShootingAngle) + pMan->py - fCameraPosY);
+            drawPlayerAim(cx, cy);
+        }
+
 
         return true;
     }
