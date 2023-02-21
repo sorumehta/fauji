@@ -163,6 +163,7 @@ class cMan : public cPhysicsObject {
 public:
     SDL_RendererFlip flipType;
     float fShootingAngle;
+
     void initSpriteClips() {
         spriteClips[0].x = 0;
         spriteClips[0].y = 0;
@@ -235,19 +236,33 @@ private:
     unsigned char *map = nullptr;
     float fCameraPosX = 0;
     float fCameraPosY = 0;
+    float fCameraPosXTarget = 0;
+    float fCameraPosYTarget = 0;
+
     float fMapScrollSpeed = 400.0f;
     std::list<std::unique_ptr<cPhysicsObject>> listObjects;
     cPhysicsObject *pObjectUnderControl = nullptr;
     cPhysicsObject *pCameraTrackingObject = nullptr;
+    bool bEnergising = false;
+    bool bFireWeapon = false;
+    float fEnergyLevel = 0;
+    bool bGameIsStable = false;
+    bool bPlayerHasControl = false;
+    bool bPlayerActionComplete = false;
+    enum GAME_STATE {
+        GS_RESET = 0,
+        GS_GENERATE_TERRAIN = 1,
+        GS_GENERATING_TERRAIN,
+        GS_ALLOCATE_UNITS,
+        GS_ALLOCATING_UNITS,
+        GS_START_PLAY,
+        GS_CAMERA_MODE
+    } nGameState, nNextState;
 
 public:
     void onUserInputEvent(int eventType, int button, int mousePosX, int mousePosY, float secPerFrame) {
-        if (eventType == SDL_MOUSEMOTION) {
-            if (mousePosX < 15) fCameraPosX -= fMapScrollSpeed * secPerFrame;
-            if (mousePosX > mWindowWidth - 15) fCameraPosX += fMapScrollSpeed * secPerFrame;
-            if (mousePosY < 15) fCameraPosY -= fMapScrollSpeed * secPerFrame;
-            if (mousePosY > mWindowHeight - 15) fCameraPosY += fMapScrollSpeed * secPerFrame;
-
+        if (!bPlayerHasControl) {
+            return;
         }
         if (eventType == SDL_MOUSEBUTTONDOWN) {
             if (button == SDL_BUTTON_RIGHT) {
@@ -260,8 +275,8 @@ public:
             }
         }
         if (eventType == SDL_KEYDOWN) {
-            if(pObjectUnderControl != nullptr){
-                if(pObjectUnderControl->bStable){
+            if (pObjectUnderControl != nullptr) {
+                if (pObjectUnderControl->bStable) {
                     cMan *pMan = dynamic_cast<cMan *>(pObjectUnderControl);
                     if (button == SDLK_RIGHT) {
                         pMan->vx = 5.0f;
@@ -273,16 +288,40 @@ public:
                         pMan->vy = -5.0f;
                         pMan->flipType = SDL_FLIP_NONE;
                         pMan->bStable = false;
-                    } else if (button == SDLK_a){
+                    } else if (button == SDLK_a) {
                         pMan->fShootingAngle -= 1.0f * secPerFrame;
-                        if(pMan->fShootingAngle < -PI){
+                        if (pMan->fShootingAngle < -PI) {
                             pMan->fShootingAngle = PI;
                         }
-                    } else if (button == SDLK_s){
+                    } else if (button == SDLK_s) {
                         pMan->fShootingAngle += 1.0f * secPerFrame;
-                        if(pMan->fShootingAngle > PI){
+                        if (pMan->fShootingAngle > PI) {
                             pMan->fShootingAngle = -PI;
                         }
+                    } else if (button == SDLK_SPACE) {
+                        if (!bEnergising) {
+                            bEnergising = true;
+                            bFireWeapon = false;
+                            fEnergyLevel = 0.0f;
+                        } else {
+                            fEnergyLevel = 0.75f * secPerFrame;
+                            if (fEnergyLevel > 1.0f) {
+                                fEnergyLevel = 1.0f;
+                                bFireWeapon = true;
+                            }
+                        }
+                    }
+
+                }
+            }
+        } else if (eventType == SDL_KEYUP) {
+            if (pObjectUnderControl != nullptr) {
+                if (pObjectUnderControl->bStable) {
+                    if (button == SDLK_SPACE) {
+                        if (bEnergising) {
+                            bFireWeapon = true;
+                        }
+                        bEnergising = false;
                     }
                 }
             }
@@ -294,25 +333,80 @@ public:
         map = new unsigned char[nMapHeight * nMapWidth];
         // initialise it with 0
         memset(map, 0, nMapWidth * nMapHeight * sizeof(unsigned char));
-        createMap();
+        //createMap();
         auto onUserInputFn = [this](int eventType, int buttonCode, int mousePosX, int mousePosY, float secPerFrame) {
             onUserInputEvent(eventType, buttonCode, mousePosX, mousePosY, secPerFrame);
         };
         InputEventHandler::addCallback("onUserInputFn_Game", onUserInputFn);
+        nGameState = GS_RESET;
+        nNextState = GS_RESET;
         return true;
     }
-    
-    void drawPlayerAim(int cx, int cy){
-        drawPoint(cx, cy, {0, 0, 0});
-        drawPoint(cx-1, cy, {0, 0, 0});
-        drawPoint(cx, cy-1, {0, 0, 0});
-        drawPoint(cx+1, cy, {0, 0, 0});
-        drawPoint(cx, cy+1, {0, 0, 0});
 
+    void drawPlayerAim(int cx, int cy) {
+        drawPoint(cx, cy, {0xFF, 0, 0});
+        drawPoint(cx - 1, cy, {0xFF, 0, 0});
+        drawPoint(cx, cy - 1, {0xFF, 0, 0});
+        drawPoint(cx + 1, cy, {0xFF, 0, 0});
+        drawPoint(cx, cy + 1, {0xFF, 0, 0});
 
     }
 
     bool onFrameUpdate(float fElapsedTime) override {
+        switch (nGameState) {
+
+            case GS_RESET: {
+                nNextState = GS_GENERATE_TERRAIN;
+                bPlayerHasControl = false;
+            }
+                break;
+            case GS_GENERATE_TERRAIN: {
+                createMap();
+                nNextState = GS_GENERATING_TERRAIN;
+                bPlayerHasControl = false;
+            }
+                break;
+            case GS_GENERATING_TERRAIN: {
+                nNextState = GS_ALLOCATE_UNITS;
+                bPlayerHasControl = false;
+            }
+                break;
+            case GS_ALLOCATE_UNITS: {
+                bPlayerHasControl = false;
+                cMan *man = new cMan(64.0f, 4.0f);
+                listObjects.push_back(std::unique_ptr<cMan>(man));
+                pObjectUnderControl = man;
+                pCameraTrackingObject = pObjectUnderControl;
+                nNextState = GS_ALLOCATING_UNITS;
+            }
+                break;
+
+            case GS_ALLOCATING_UNITS: {
+                bPlayerHasControl = false;
+                if (bGameIsStable) {
+                    nNextState = GS_START_PLAY;
+                    bPlayerActionComplete = false;
+                }
+            }
+                break;
+            case GS_START_PLAY: {
+                bPlayerHasControl = true;
+
+                if (bPlayerActionComplete) {
+                    nNextState = GS_CAMERA_MODE;
+                }
+            }
+                break;
+            case GS_CAMERA_MODE: {
+                bPlayerHasControl = false;
+                bPlayerActionComplete = false;
+                if(bGameIsStable){
+                    nNextState = GS_START_PLAY;
+                    pCameraTrackingObject = pObjectUnderControl;
+                }
+            }
+                break;
+        }
 
         // do 10 physics iterations per frame, since drawing a frame is slower than updating physics
         for (int z = 0; z < 10; z++) {
@@ -380,6 +474,7 @@ public:
                             int nResponse = obj->ObjDeadAction();
                             if (nResponse > 0) {
                                 BOOM(obj->px, obj->py, nResponse);
+                                pCameraTrackingObject = nullptr;
                             }
                         }
                     }
@@ -399,11 +494,15 @@ public:
             // is explicitly disabled (for obvious reasons).
             listObjects.remove_if([](std::unique_ptr<cPhysicsObject> &o) { return o->bDead; });
         }
-        // Buggy code
-//        if(pCameraTrackingObject != nullptr){
-//            fCameraPosX = pCameraTrackingObject->px - mWindowWidth/2;
+
+        if (pCameraTrackingObject != nullptr) {
+            fCameraPosXTarget = pCameraTrackingObject->px - mWindowWidth / 2;
+            // we interpolate the camera position slowly between current
+            // position and target position to give a smooth transition effect
+            fCameraPosX += (fCameraPosXTarget - fCameraPosX) * 5.0f * fElapsedTime;
+            // TODO: tracking y is causing bugs, fix it later
 //            fCameraPosY = pCameraTrackingObject->py - mWindowHeight/2;
-//        }
+        }
 
         if (fCameraPosX < 0) fCameraPosX = 0;
         if (fCameraPosX >= nMapWidth - mWindowWidth) fCameraPosX = nMapWidth - mWindowWidth;
@@ -423,20 +522,47 @@ public:
                 }
             }
         }
+
+        if (pObjectUnderControl != nullptr) {
+            cMan *pMan = dynamic_cast<cMan *>(pObjectUnderControl);
+            // directions of shooting
+            float dx = std::cos(pMan->fShootingAngle);
+            float dy = std::sin(pMan->fShootingAngle);
+            if (bFireWeapon) {
+                const float fMagFireVelocity = 40;
+                fEnergyLevel = 0.5f;
+                cMissile *missile = new cMissile(pMan->px, pMan->py, fMagFireVelocity * fEnergyLevel * dx,
+                                                 fMagFireVelocity * fEnergyLevel * dy);
+                listObjects.push_back(std::unique_ptr<cMissile>(missile));
+                pCameraTrackingObject = missile;
+                bFireWeapon = false;
+                fEnergyLevel = 0.0f;
+                bEnergising = false;
+                bPlayerActionComplete = true;
+            }
+
+            const int aimLength = 30;
+            int cx = static_cast<int>(aimLength * dx + pMan->px - fCameraPosX);
+            int cy = static_cast<int>(aimLength * dy + pMan->py - fCameraPosY);
+            drawPlayerAim(cx, cy);
+        }
         // draw objects
         for (auto &p: listObjects) {
             p->draw(this, fCameraPosX, fCameraPosY);
         }
-        // draw a shooting aim near the man in control
-        if(pObjectUnderControl != nullptr){
-            cMan *pMan = dynamic_cast<cMan *>(pObjectUnderControl);
-            const int aimLength = 30.0f;
-            int cx = static_cast<int>(aimLength * std::cos(pMan->fShootingAngle) + pMan->px - fCameraPosX);
-            int cy = static_cast<int>(aimLength * std::sin(pMan->fShootingAngle) + pMan->py - fCameraPosY);
-            drawPlayerAim(cx, cy);
+
+        // check for game stability
+        bGameIsStable = true;
+        for (auto &p: listObjects) {
+            if (!p->bStable) {
+                bGameIsStable = false;
+                break;
+            }
         }
-
-
+        if (bGameIsStable) {
+            fillRect(4, 4, 10, 10, {0xFF, 0, 0});
+        }
+        nGameState = nNextState;
         return true;
     }
 
