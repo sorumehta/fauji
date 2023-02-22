@@ -213,10 +213,15 @@ private:
 LTexture *cMan::spritePtr = nullptr;
 
 void cMan::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
-    SDL_Rect *currentClip = &spriteClips[frame / 2];
-    if (std::abs(vx) < 3) {
+    SDL_Rect *currentClip = nullptr;
+    if (std::abs(vx) > 4 && std::abs(vx) < 6) {
+        currentClip = &spriteClips[frame / 2];
+    }
+    else{
         currentClip = &spriteClips[0];
     }
+
+
     spritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius, radius * 2, radius * 2, currentClip, 0, NULL,
                            flipType);
     frame++;
@@ -282,21 +287,45 @@ public:
                         pMan->vx = 5.0f;
                         pMan->vy = -5.0f;
                         pMan->flipType = SDL_FLIP_HORIZONTAL;
+                        pMan->fShootingAngle = PI/2;
                         pMan->bStable = false;
                     } else if (button == SDLK_LEFT) {
                         pMan->vx = -5.0f;
                         pMan->vy = -5.0f;
                         pMan->flipType = SDL_FLIP_NONE;
+                        pMan->fShootingAngle = PI/2;
                         pMan->bStable = false;
-                    } else if (button == SDLK_a) {
+                    } else if(button == SDLK_UP){
+                        float angle = ((cMan*)pObjectUnderControl)->fShootingAngle;
+                        pObjectUnderControl->vx = 6.0f * std::cosf(angle);
+                        pObjectUnderControl->vy = 12.0f * std::sinf(angle);
+                    }
+                    else if (button == SDLK_a) {
                         pMan->fShootingAngle -= 1.0f * secPerFrame;
-                        if (pMan->fShootingAngle < -PI) {
-                            pMan->fShootingAngle = PI;
+                        if(pMan->flipType != SDL_FLIP_NONE){
+                            if (pMan->fShootingAngle < -PI/2) {
+                                pMan->fShootingAngle = PI/2;
+                            }
+                        } else {
+                            if (pMan->fShootingAngle < -PI) {
+                                pMan->fShootingAngle = PI;
+                            } else if(pMan->fShootingAngle > 0 && pMan->fShootingAngle < PI/2){
+                                pMan->fShootingAngle = -PI/2;
+                            }
                         }
+
                     } else if (button == SDLK_s) {
                         pMan->fShootingAngle += 1.0f * secPerFrame;
-                        if (pMan->fShootingAngle > PI) {
-                            pMan->fShootingAngle = -PI;
+                        if(pMan->flipType != SDL_FLIP_NONE){
+                            if (pMan->fShootingAngle > PI/2) {
+                                pMan->fShootingAngle = -PI/2;
+                            }
+                        } else {
+                            if (pMan->fShootingAngle > PI) {
+                                pMan->fShootingAngle = -PI;
+                            } else if(pMan->fShootingAngle > -PI/2 && pMan->fShootingAngle < 0){
+                                pMan->fShootingAngle = PI/2;
+                            }
                         }
                     } else if (button == SDLK_SPACE) {
                         if (!bEnergising) {
@@ -344,12 +373,7 @@ public:
     }
 
     void drawPlayerAim(int cx, int cy) {
-        drawPoint(cx, cy, {0xFF, 0, 0});
-        drawPoint(cx - 1, cy, {0xFF, 0, 0});
-        drawPoint(cx, cy - 1, {0xFF, 0, 0});
-        drawPoint(cx + 1, cy, {0xFF, 0, 0});
-        drawPoint(cx, cy + 1, {0xFF, 0, 0});
-
+        fillRect(cx, cy, 4, 4, {0xFF, 0, 0});
     }
 
     bool onFrameUpdate(float fElapsedTime) override {
@@ -418,6 +442,7 @@ public:
                 // update velocity
                 obj->vx += obj->ax * fElapsedTime;
                 obj->vy += obj->ay * fElapsedTime;
+                std::cout << obj->vx << std::endl;
 
                 // update positions
                 float fPotentialX = obj->px + obj->vx * fElapsedTime;
