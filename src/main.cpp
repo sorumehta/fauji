@@ -24,6 +24,7 @@ public:
     virtual void draw(GameEngine *engine, float fOffsetX, float fOffsetY) = 0;
 
     virtual int ObjDeadAction() = 0;
+//    virtual bool Damage(float d) = 0;
 };
 
 class cDummy : public cPhysicsObject {
@@ -163,6 +164,9 @@ class cMan : public cPhysicsObject {
 public:
     SDL_RendererFlip flipType;
     float fShootingAngle;
+    float fHealth = 1.0f;
+    bool bIsPlayable = true;
+    int nTeam = 0;
 
     void initSpriteClips() {
         spriteClips[0].x = 0;
@@ -208,31 +212,68 @@ private:
     static LTexture *spritePtr; // shared across instances
     SDL_Rect spriteClips[4];
     int frame;
+
 };
 
 LTexture *cMan::spritePtr = nullptr;
 
 void cMan::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
-    SDL_Rect *currentClip = nullptr;
-    if (std::abs(vx) > 4 && std::abs(vx) < 6) {
-        currentClip = &spriteClips[frame / 2];
-    }
-    else{
-        currentClip = &spriteClips[0];
+    if (bIsPlayable) {
+        SDL_Rect *currentClip = nullptr;
+        if (std::abs(vx) > 4 && std::abs(vx) < 6) {
+            currentClip = &spriteClips[frame / 2];
+        } else {
+            currentClip = &spriteClips[0];
+        }
+        spritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius, radius * 2, radius * 2, currentClip, 0,
+                               NULL,
+                               flipType);
+        frame++;
+        if (frame / 2 >= 4) {
+            frame = 0;
+        }
+
+        // draw health bar
+        for (int i = 0; i < 22 * fHealth; i++) {
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 20 - fOffsetY, {0, 0, 0xFF});
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 21 - fOffsetY, {0, 0, 0xFF});
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 22 - fOffsetY, {0, 0, 0xFF});
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 23 - fOffsetY, {0, 0, 0xFF});
+        }
+    } else {
+        // TODO: draw gravestone texture;
+//        spritePtr = new LTexture();
+//        spritePtr->loadTextureFromFile("../res/foo.png");
     }
 
-
-    spritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius, radius * 2, radius * 2, currentClip, 0, NULL,
-                           flipType);
-    frame++;
-    if (frame / 2 >= 4) {
-        frame = 0;
-    }
 }
 
 int cMan::ObjDeadAction() {
     return 0;
 }
+
+class cTeam {
+public:
+    std::vector<cMan *> vecMembers;
+    int nCurrentMember = 0;
+    int nTeamSize = 0;
+
+    bool isTeamStillAlive() {
+        bool bAllDead = false;
+        for (auto w: vecMembers) {
+            bAllDead |= (w->fHealth > 0);
+        }
+        return bAllDead;
+    }
+
+    cMan *getNextMember() {
+        do {
+            nCurrentMember++;
+            if (nCurrentMember >= nTeamSize) nCurrentMember = 0;
+        } while (vecMembers[nCurrentMember]->fHealth <= 0);
+        return vecMembers[nCurrentMember];
+    }
+};
 
 class Fauji : public GameEngine {
 private:
@@ -248,12 +289,21 @@ private:
     std::list<std::unique_ptr<cPhysicsObject>> listObjects;
     cPhysicsObject *pObjectUnderControl = nullptr;
     cPhysicsObject *pCameraTrackingObject = nullptr;
-    bool bEnergising = false;
-    bool bFireWeapon = false;
     float fEnergyLevel = 0;
+    float fOldEnergyLevel = 0;
+    bool bFireWeapon = false;
+    bool bShowCountDown = false;
+    float fTurnTime = 0.0f;
     bool bGameIsStable = false;
     bool bPlayerHasControl = false;
+    bool bComputerHasControl = false;
     bool bPlayerActionComplete = false;
+    float fTimeSinceEnergyLevelSet = 0;
+    // Vector to store teams
+    std::vector<cTeam> vecTeams;
+    // Current team being controlled
+    int nCurrentTeam = 0;
+
     enum GAME_STATE {
         GS_RESET = 0,
         GS_GENERATE_TERRAIN = 1,
@@ -261,7 +311,8 @@ private:
         GS_ALLOCATE_UNITS,
         GS_ALLOCATING_UNITS,
         GS_START_PLAY,
-        GS_CAMERA_MODE
+        GS_CAMERA_MODE,
+        GS_GAME_OVER
     } nGameState, nNextState;
 
 public:
@@ -287,70 +338,50 @@ public:
                         pMan->vx = 5.0f;
                         pMan->vy = -5.0f;
                         pMan->flipType = SDL_FLIP_HORIZONTAL;
-                        pMan->fShootingAngle = PI/2;
+                        pMan->fShootingAngle = PI / 2;
                         pMan->bStable = false;
                     } else if (button == SDLK_LEFT) {
                         pMan->vx = -5.0f;
                         pMan->vy = -5.0f;
                         pMan->flipType = SDL_FLIP_NONE;
-                        pMan->fShootingAngle = PI/2;
+                        pMan->fShootingAngle = PI / 2;
                         pMan->bStable = false;
-                    } else if(button == SDLK_UP){
-                        float angle = ((cMan*)pObjectUnderControl)->fShootingAngle;
+                    } else if (button == SDLK_UP) {
+                        float angle = ((cMan *) pObjectUnderControl)->fShootingAngle;
                         pObjectUnderControl->vx = 6.0f * std::cosf(angle);
                         pObjectUnderControl->vy = 12.0f * std::sinf(angle);
-                    }
-                    else if (button == SDLK_a) {
+                    } else if (button == SDLK_a) {
                         pMan->fShootingAngle -= 1.0f * secPerFrame;
-                        if(pMan->flipType != SDL_FLIP_NONE){
-                            if (pMan->fShootingAngle < -PI/2) {
-                                pMan->fShootingAngle = PI/2;
+                        if (pMan->flipType != SDL_FLIP_NONE) {
+                            if (pMan->fShootingAngle < -PI / 2) {
+                                pMan->fShootingAngle = PI / 2;
                             }
                         } else {
                             if (pMan->fShootingAngle < -PI) {
                                 pMan->fShootingAngle = PI;
-                            } else if(pMan->fShootingAngle > 0 && pMan->fShootingAngle < PI/2){
-                                pMan->fShootingAngle = -PI/2;
+                            } else if (pMan->fShootingAngle > 0 && pMan->fShootingAngle < PI / 2) {
+                                pMan->fShootingAngle = -PI / 2;
                             }
                         }
 
                     } else if (button == SDLK_s) {
                         pMan->fShootingAngle += 1.0f * secPerFrame;
-                        if(pMan->flipType != SDL_FLIP_NONE){
-                            if (pMan->fShootingAngle > PI/2) {
-                                pMan->fShootingAngle = -PI/2;
+                        if (pMan->flipType != SDL_FLIP_NONE) {
+                            if (pMan->fShootingAngle > PI / 2) {
+                                pMan->fShootingAngle = -PI / 2;
                             }
                         } else {
                             if (pMan->fShootingAngle > PI) {
                                 pMan->fShootingAngle = -PI;
-                            } else if(pMan->fShootingAngle > -PI/2 && pMan->fShootingAngle < 0){
-                                pMan->fShootingAngle = PI/2;
+                            } else if (pMan->fShootingAngle > -PI / 2 && pMan->fShootingAngle < 0) {
+                                pMan->fShootingAngle = PI / 2;
                             }
                         }
                     } else if (button == SDLK_SPACE) {
-                        if (!bEnergising) {
-                            bEnergising = true;
-                            bFireWeapon = false;
-                            fEnergyLevel = 0.0f;
-                        } else {
-                            fEnergyLevel = 0.75f * secPerFrame;
-                            if (fEnergyLevel > 1.0f) {
-                                fEnergyLevel = 1.0f;
-                                bFireWeapon = true;
-                            }
+                        fEnergyLevel += 0.75f * secPerFrame;
+                        if (fEnergyLevel > 1.0f){
+                            fEnergyLevel = 1.0f;
                         }
-                    }
-
-                }
-            }
-        } else if (eventType == SDL_KEYUP) {
-            if (pObjectUnderControl != nullptr) {
-                if (pObjectUnderControl->bStable) {
-                    if (button == SDLK_SPACE) {
-                        if (bEnergising) {
-                            bFireWeapon = true;
-                        }
-                        bEnergising = false;
                     }
                 }
             }
@@ -372,9 +403,6 @@ public:
         return true;
     }
 
-    void drawPlayerAim(int cx, int cy) {
-        fillRect(cx, cy, 4, 4, {0xFF, 0, 0});
-    }
 
     bool onFrameUpdate(float fElapsedTime) override {
         switch (nGameState) {
@@ -397,10 +425,31 @@ public:
                 break;
             case GS_ALLOCATE_UNITS: {
                 bPlayerHasControl = false;
-                cMan *man = new cMan(64.0f, 4.0f);
-                listObjects.push_back(std::unique_ptr<cMan>(man));
-                pObjectUnderControl = man;
+                int nTeams = 2;
+                int nWormsPerTeam = 2;
+                float fSpacePerTeam = (float) nMapWidth / (float) nTeams;
+                float fSpacePerWorm = (float) fSpacePerTeam / ((float) nWormsPerTeam * 2.0f);
+
+                // create teams
+                for (int t = 0; t < nTeams; t++) {
+                    vecTeams.emplace_back(cTeam());
+                    float fTeamMiddle = ((fSpacePerTeam) / 2.0f) + (t * fSpacePerTeam);
+                    for (int w = 0; w < nWormsPerTeam; w++) {
+                        float fManX = fTeamMiddle - ((fSpacePerWorm * (float) nWormsPerTeam) / 2) + w * fSpacePerWorm;;
+                        float fManY = 0.0f;
+
+                        // add worms to teams
+                        cMan *man = new cMan(fManX, fManY);
+                        man->nTeam = t;
+                        listObjects.push_back(std::unique_ptr<cMan>(man));
+                        vecTeams[t].vecMembers.push_back(man);
+                        vecTeams[t].nTeamSize = nWormsPerTeam;
+                    }
+                }
+                // Select players first man for control and camera tracking
+                pObjectUnderControl = vecTeams[0].vecMembers[vecTeams[0].nCurrentMember];
                 pCameraTrackingObject = pObjectUnderControl;
+                bShowCountDown = false;
                 nNextState = GS_ALLOCATING_UNITS;
             }
                 break;
@@ -414,9 +463,9 @@ public:
             }
                 break;
             case GS_START_PLAY: {
-                bPlayerHasControl = true;
+                bShowCountDown = true;
 
-                if (bPlayerActionComplete) {
+                if (bPlayerActionComplete || fTurnTime <= 0.0f) {
                     nNextState = GS_CAMERA_MODE;
                 }
             }
@@ -424,14 +473,42 @@ public:
             case GS_CAMERA_MODE: {
                 bPlayerHasControl = false;
                 bPlayerActionComplete = false;
-                if(bGameIsStable){
+                bComputerHasControl = false;
+                bShowCountDown = false;
+                fEnergyLevel = 0;
+                if (bGameIsStable) {
+                    // get next team
+                    int nOldTeam = nCurrentTeam;
+                    do {
+                        nCurrentTeam++;
+                        nCurrentTeam %= vecTeams.size();
+                    } while (!vecTeams[nCurrentTeam].isTeamStillAlive());
+
+                    // lock control if AI team is playing
+                    if (nCurrentTeam == 0) { // player team
+                        bPlayerHasControl = true;
+                        bComputerHasControl = false;
+                    } else {
+                        bPlayerHasControl = true;
+                        bComputerHasControl = false;
+                    }
                     nNextState = GS_START_PLAY;
+                    pObjectUnderControl = vecTeams[nCurrentTeam].getNextMember();
                     pCameraTrackingObject = pObjectUnderControl;
+                    fTurnTime = 15.0f;
+
+                    // if it is the same team, current team won
+                    if (nCurrentTeam == nOldTeam) {
+                        nNextState = GS_GAME_OVER;
+                    }
                 }
             }
                 break;
+            case GS_GAME_OVER: {
+                std::cout << "GAME OVER" << std::endl;
+            }
         }
-
+        fTurnTime -= fElapsedTime;
         // do 10 physics iterations per frame, since drawing a frame is slower than updating physics
         for (int z = 0; z < 10; z++) {
 
@@ -442,7 +519,6 @@ public:
                 // update velocity
                 obj->vx += obj->ax * fElapsedTime;
                 obj->vy += obj->ay * fElapsedTime;
-                std::cout << obj->vx << std::endl;
 
                 // update positions
                 float fPotentialX = obj->px + obj->vx * fElapsedTime;
@@ -553,23 +629,48 @@ public:
             // directions of shooting
             float dx = std::cos(pMan->fShootingAngle);
             float dy = std::sin(pMan->fShootingAngle);
+
+            // fire the weapon if the energy level is set to a specific value for 1 second
+            if (fEnergyLevel > 0.0f){
+                if( fEnergyLevel != fOldEnergyLevel){
+                    fOldEnergyLevel = fEnergyLevel;
+                    fTimeSinceEnergyLevelSet = 0;
+                }else{
+                    fTimeSinceEnergyLevelSet += fElapsedTime;
+                    if (fTimeSinceEnergyLevelSet > 1){
+                        bFireWeapon = true;
+                    }
+                }
+
+            } else {
+                fTimeSinceEnergyLevelSet = 0;
+            }
+
             if (bFireWeapon) {
                 const float fMagFireVelocity = 40;
-                fEnergyLevel = 0.5f;
                 cMissile *missile = new cMissile(pMan->px, pMan->py, fMagFireVelocity * fEnergyLevel * dx,
                                                  fMagFireVelocity * fEnergyLevel * dy);
                 listObjects.push_back(std::unique_ptr<cMissile>(missile));
                 pCameraTrackingObject = missile;
                 bFireWeapon = false;
                 fEnergyLevel = 0.0f;
-                bEnergising = false;
+                fTimeSinceEnergyLevelSet = 0;
                 bPlayerActionComplete = true;
             }
 
             const int aimLength = 30;
             int cx = static_cast<int>(aimLength * dx + pMan->px - fCameraPosX);
             int cy = static_cast<int>(aimLength * dy + pMan->py - fCameraPosY);
-            drawPlayerAim(cx, cy);
+            // draw missile aim
+            fillRect(cx, cy, 4, 4, {0xFF, 0, 0});
+
+            // draw energy bar
+            for (int i = 0; i < 22 * fEnergyLevel; i++) {
+                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 20 - fCameraPosY, {0xFF, 0, 0});
+                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 21 - fCameraPosY, {0xFF, 0, 0});
+                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 22 - fCameraPosY, {0xFF, 0, 0});
+                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 23 - fCameraPosY, {0xFF, 0, 0});
+            }
         }
         // draw objects
         for (auto &p: listObjects) {
