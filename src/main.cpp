@@ -24,45 +24,8 @@ public:
     virtual void draw(GameEngine *engine, float fOffsetX, float fOffsetY) = 0;
 
     virtual int ObjDeadAction() = 0;
-//    virtual bool Damage(float d) = 0;
+    virtual bool Damage(float d) = 0;
 };
-
-class cDummy : public cPhysicsObject {
-public:
-    cDummy(float x = 0.0f, float y = 0.0f) : cPhysicsObject(x, y) {
-        radius = 16.0f;
-    }
-
-    void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override {
-        engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, std::atan2f(vy, vx), radius);
-    }
-
-    int ObjDeadAction() override;
-
-private:
-    // we want vecModel to be shared among all instances, so make it static
-    // since it is static, it must be initialised out of line
-    static std::vector<std::pair<float, float>> vecModel;
-};
-
-std::vector<std::pair<float, float>> defineDummy() {
-    std::vector<std::pair<float, float>> vecModel;
-    vecModel.emplace_back(0, 0);
-    int nVertices = 10;
-    for (int i = 0; i <= nVertices; i++) {
-        vecModel.emplace_back(std::cos((i / (float) (nVertices)) * 2.0f * PI),
-                              std::sin((i / (float) (nVertices)) * 2.0f * PI));
-    }
-    return vecModel;
-}
-
-// out of line initialisation of static member
-std::vector<std::pair<float, float>> cDummy::vecModel = defineDummy();
-
-int cDummy::ObjDeadAction() {
-    return 0;
-}
-
 
 class cDebris : public cPhysicsObject {
 public:
@@ -78,6 +41,11 @@ public:
     void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override {
         engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, std::atan2f(vy, vx), radius,
                                    {0x00, 0x64, 0x00});
+    }
+
+    bool Damage(float d) override
+    {
+        return true; // Cannot be damaged
     }
 
     int ObjDeadAction() override;
@@ -120,6 +88,11 @@ public:
 
     virtual void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override {
         engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, atan2f(vy, vx), radius, {0xFF, 0, 0});
+    }
+
+    bool Damage(float d) override
+    {
+        return true; // Cannot be damaged
     }
 
     int ObjDeadAction() override;
@@ -202,6 +175,17 @@ public:
             spritePtr = new LTexture();
             spritePtr->loadTextureFromFile("../res/foo.png");
         }
+    }
+
+    virtual bool Damage(float d) // Reduce worm's health by said amount
+    {
+        fHealth -= d;
+        if (fHealth <= 0)
+        { // Worm has died, no longer playable
+            fHealth = 0.0f;
+            bIsPlayable = false;
+        }
+        return fHealth > 0;
     }
 
     int ObjDeadAction() override;
@@ -732,6 +716,7 @@ public:
                 // the new velocity should be in the direction of the distance vector and inversely proportional to the distance
                 p->vx = (dx / fDist) * fRadius;
                 p->vy = (dy / fDist) * fRadius;
+                p->Damage(((fRadius - fDist) / fRadius) * 0.8f);
                 p->bStable = false;
             }
         }
