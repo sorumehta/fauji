@@ -140,6 +140,9 @@ public:
     float fHealth = 1.0f;
     bool bIsPlayable = true;
     int nTeam = 0;
+    static LTexture *spritePtr; // shared across instances
+    SDL_Rect spriteClips[4];
+    int frame;
 
     void initSpriteClips() {
         spriteClips[0].x = 0;
@@ -192,11 +195,6 @@ public:
 
     void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override;
 
-private:
-    static LTexture *spritePtr; // shared across instances
-    SDL_Rect spriteClips[4];
-    int frame;
-
 };
 
 LTexture *cMan::spritePtr = nullptr;
@@ -236,6 +234,43 @@ int cMan::ObjDeadAction() {
     return 0;
 }
 
+class cEnemy : public cMan {
+public:
+    cEnemy(float x, float y): cMan(x, y) {}
+    void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override;
+};
+
+
+void cEnemy::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
+    if (bIsPlayable) {
+        SDL_Rect *currentClip = nullptr;
+        if (std::abs(vx) > 4 && std::abs(vx) < 6) {
+            currentClip = &spriteClips[frame / 2];
+        } else {
+            currentClip = &spriteClips[0];
+        }
+        spritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius, radius * 2, radius * 2, currentClip, 0,
+                               NULL,
+                               flipType);
+        frame++;
+        if (frame / 2 >= 4) {
+            frame = 0;
+        }
+
+        // draw health bar
+        for (int i = 0; i < 22 * fHealth; i++) {
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 20 - fOffsetY, {0xFF, 0, 0});
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 21 - fOffsetY, {0xFF, 0, 0});
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 22 - fOffsetY, {0xFF, 0, 0});
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 23 - fOffsetY, {0xFF, 0, 0});
+        }
+    } else {
+        // TODO: draw gravestone texture;
+//        spritePtr = new LTexture();
+//        spritePtr->loadTextureFromFile("../res/foo.png");
+    }
+
+}
 class cTeam {
 public:
     std::vector<cMan *> vecMembers;
@@ -304,16 +339,16 @@ public:
         if (!bPlayerHasControl) {
             return;
         }
-        if (eventType == SDL_MOUSEBUTTONDOWN) {
-            if (button == SDL_BUTTON_RIGHT) {
-                listObjects.push_back(std::make_unique<cMissile>(mousePosX + fCameraPosX, mousePosY + fCameraPosY));
-            } else if (button == SDL_BUTTON_LEFT) {
-                cMan *man = new cMan(mousePosX + fCameraPosX, mousePosY + fCameraPosY);
-                pObjectUnderControl = man;
-                pCameraTrackingObject = man;
-                listObjects.push_back(std::unique_ptr<cMan>(man));
-            }
-        }
+//        if (eventType == SDL_MOUSEBUTTONDOWN) {
+//            if (button == SDL_BUTTON_RIGHT) {
+//                listObjects.push_back(std::make_unique<cMissile>(mousePosX + fCameraPosX, mousePosY + fCameraPosY));
+//            } else if (button == SDL_BUTTON_LEFT) {
+//                cMan *man = new cMan(mousePosX + fCameraPosX, mousePosY + fCameraPosY);
+//                pObjectUnderControl = man;
+//                pCameraTrackingObject = man;
+//                listObjects.push_back(std::unique_ptr<cMan>(man));
+//            }
+//        }
         if (eventType == SDL_KEYDOWN) {
             if (pObjectUnderControl != nullptr) {
                 if (pObjectUnderControl->bStable) {
@@ -409,24 +444,29 @@ public:
             case GS_ALLOCATE_UNITS: {
                 bPlayerHasControl = false;
                 int nTeams = 2;
-                int nWormsPerTeam = 2;
+                int nMembersPerTeam = 2;
                 float fSpacePerTeam = (float) nMapWidth / (float) nTeams;
-                float fSpacePerWorm = (float) fSpacePerTeam / ((float) nWormsPerTeam * 2.0f);
+                float fSpacePerMember = (float) fSpacePerTeam / ((float) nMembersPerTeam * 2.0f);
 
                 // create teams
                 for (int t = 0; t < nTeams; t++) {
                     vecTeams.emplace_back(cTeam());
                     float fTeamMiddle = ((fSpacePerTeam) / 2.0f) + (t * fSpacePerTeam);
-                    for (int w = 0; w < nWormsPerTeam; w++) {
-                        float fManX = fTeamMiddle - ((fSpacePerWorm * (float) nWormsPerTeam) / 2) + w * fSpacePerWorm;;
+                    for (int w = 0; w < nMembersPerTeam; w++) {
+                        float fManX = fTeamMiddle - ((fSpacePerMember * (float) nMembersPerTeam) / 2) + w * fSpacePerMember;;
                         float fManY = 0.0f;
 
-                        // add worms to teams
-                        cMan *man = new cMan(fManX, fManY);
+                        // add members to teams
+                        cMan *man = nullptr;
+                        if(t == 0){
+                            man = new cMan(fManX, fManY);
+                        } else{
+                            man = new cEnemy(fManX, fManY);
+                        }
                         man->nTeam = t;
                         listObjects.push_back(std::unique_ptr<cMan>(man));
                         vecTeams[t].vecMembers.push_back(man);
-                        vecTeams[t].nTeamSize = nWormsPerTeam;
+                        vecTeams[t].nTeamSize = nMembersPerTeam;
                     }
                 }
                 // Select players first man for control and camera tracking
@@ -447,7 +487,14 @@ public:
                 break;
             case GS_START_PLAY: {
                 bShowCountDown = true;
-
+                // clamp the players so that they don't walk off map
+                for(auto t: vecTeams){
+                    for(auto m : t.vecMembers){
+                        if(m->px < 5) m->px = 5;
+                        if(m->px > nMapWidth - 5) m->px = nMapWidth - 5;
+                    }
+                }
+                // if any player has gone off screen, bring him back
                 if (bPlayerActionComplete || fTurnTime <= 0.0f) {
                     nNextState = GS_CAMERA_MODE;
                 }
@@ -657,10 +704,10 @@ public:
 
             // draw energy bar
             for (int i = 0; i < 22 * fEnergyLevel; i++) {
-                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 20 - fCameraPosY, {0xFF, 0, 0});
-                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 21 - fCameraPosY, {0xFF, 0, 0});
-                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 22 - fCameraPosY, {0xFF, 0, 0});
-                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 23 - fCameraPosY, {0xFF, 0, 0});
+                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 20 - fCameraPosY, {0xFF, 0, 0xFF});
+                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 21 - fCameraPosY, {0xFF, 0, 0xFF});
+                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 22 - fCameraPosY, {0xFF, 0, 0xFF});
+                drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 23 - fCameraPosY, {0xFF, 0, 0xFF});
             }
         }
         // draw objects
