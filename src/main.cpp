@@ -103,7 +103,7 @@ private:
 };
 
 int cMissile::ObjDeadAction() {
-    return 20;
+    return 30;
 }
 
 std::vector<std::pair<float, float>> DefineMissile() {
@@ -331,9 +331,8 @@ public:
                         pMan->fShootingAngle = PI / 2;
                         pMan->bStable = false;
                     } else if (button == SDLK_UP) {
-                        float angle = ((cMan *) pObjectUnderControl)->fShootingAngle;
-                        pObjectUnderControl->vx = 6.0f * std::cosf(angle);
-                        pObjectUnderControl->vy = 12.0f * std::sinf(angle);
+                        pObjectUnderControl->vx = 3.0f * (((cMan *) pObjectUnderControl)->flipType == SDL_FLIP_NONE ? -1.0f : 1.0f);
+                        pObjectUnderControl->vy = -15.0f;
                     } else if (button == SDLK_a) {
                         pMan->fShootingAngle -= 1.0f * secPerFrame;
                         if (pMan->flipType != SDL_FLIP_NONE) {
@@ -492,6 +491,7 @@ public:
                 std::cout << "GAME OVER" << std::endl;
             }
         }
+
         fTurnTime -= fElapsedTime;
         // do 10 physics iterations per frame, since drawing a frame is slower than updating physics
         for (int z = 0; z < 10; z++) {
@@ -647,6 +647,13 @@ public:
             int cy = static_cast<int>(aimLength * dy + pMan->py - fCameraPosY);
             // draw missile aim
             fillRect(cx, cy, 4, 4, {0xFF, 0, 0});
+
+            // draw timer
+            if(bShowCountDown){
+                LTexture texture;
+                texture.loadTextureFromText(std::to_string( static_cast<int>(fTurnTime)), {0, 0, 0});
+                texture.drawTexture(3, 6);
+            }
 
             // draw energy bar
             for (int i = 0; i < 22 * fEnergyLevel; i++) {
