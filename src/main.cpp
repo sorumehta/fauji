@@ -24,6 +24,7 @@ public:
     virtual void draw(GameEngine *engine, float fOffsetX, float fOffsetY) = 0;
 
     virtual int ObjDeadAction() = 0;
+
     virtual bool Damage(float d) = 0;
 };
 
@@ -43,8 +44,7 @@ public:
                                    {0x00, 0x64, 0x00});
     }
 
-    bool Damage(float d) override
-    {
+    bool Damage(float d) override {
         return true; // Cannot be damaged
     }
 
@@ -90,8 +90,7 @@ public:
         engine->DrawWireFrameModel(vecModel, px - fOffsetX, py - fOffsetY, atan2f(vy, vx), radius, {0xFF, 0, 0});
     }
 
-    bool Damage(float d) override
-    {
+    bool Damage(float d) override {
         return true; // Cannot be damaged
     }
 
@@ -188,8 +187,7 @@ public:
     virtual bool Damage(float d) // Reduce worm's health by said amount
     {
         fHealth -= d;
-        if (fHealth <= 0)
-        { // Worm has died, no longer playable
+        if (fHealth <= 0) { // Worm has died, no longer playable
             fHealth = 0.0f;
             bIsPlayable = false;
         }
@@ -221,7 +219,7 @@ void cMan::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
             frame = 0;
         }
         Color healthColor = {};
-        if (  nTeam == 0 ){
+        if (nTeam == 0) {
             healthColor = {0, 0, 0xFF};
         } else {
             healthColor = {0xFF, 0, 0};
@@ -296,6 +294,21 @@ private:
     // Current team being controlled
     int nCurrentTeam = 0;
 
+    // AI control flags
+    bool bAI_AimLeft = false;            // AI has pressed "AIM_LEFT" key
+    bool bAI_AimRight = false;            // AI has pressed "AIM_RIGHT" key
+    bool bAI_Energise = false;            // AI has pressed "FIRE" key
+    bool bAI_Walk = false;              // AI is walking, which can include jumping if necessary
+    bool bAI_Jump = false;
+    bool bAI_Flipped = false;           // AI is facing left
+
+    float fAITargetAngle = 0.0f;        // Angle AI should aim for
+    float fAITargetEnergy = 0.0f;        // Energy level AI should aim for
+    float fAISafePosition = 0.0f;        // X-Coordinate considered safe for AI to move to
+    cMan *pAITargetMan = nullptr;        // Pointer to worm AI has selected as target
+    float fAITargetX = 0.0f;            // Coordinates of target missile location
+    float fAITargetY = 0.0f;
+
     enum GAME_STATE {
         GS_RESET = 0,
         GS_GENERATE_TERRAIN = 1,
@@ -307,7 +320,74 @@ private:
         GS_GAME_OVER
     } nGameState, nNextState;
 
+    enum AI_STATE {
+        AI_ASSESS_ENVIRONMENT = 0,
+        AI_MOVE,
+        AI_CHOOSE_TARGET,
+        AI_POSITION_FOR_TARGET,
+        AI_AIM,
+        AI_FIRE,
+    } nAIState, nAINextState;
+
 public:
+    void walkManRight(cMan *pMan) {
+        pMan->vx = 5.0f;
+        pMan->vy = -5.0f;
+        pMan->flipType = SDL_FLIP_HORIZONTAL;
+        pMan->fShootingAngle = PI / 2;
+        pMan->bStable = false;
+    }
+
+    void walkManLeft(cMan *pMan) {
+        pMan->vx = -5.0f;
+        pMan->vy = -5.0f;
+        pMan->flipType = SDL_FLIP_NONE;
+        pMan->fShootingAngle = PI / 2;
+        pMan->bStable = false;
+    }
+
+    void manJump(cMan *pMan) {
+        pMan->vx = 3.0f * (pMan->flipType == SDL_FLIP_NONE ? -1.0f : 1.0f);
+        pMan->vy = -15.0f;
+    }
+
+    void aimLeft(cMan *pMan, float secPerFrame) {
+        pMan->fShootingAngle -= 1.0f * secPerFrame;
+        if (pMan->flipType != SDL_FLIP_NONE) {
+            if (pMan->fShootingAngle < -PI / 2) {
+                pMan->fShootingAngle = PI / 2;
+            }
+        } else {
+            if (pMan->fShootingAngle < -PI) {
+                pMan->fShootingAngle = PI;
+            } else if (pMan->fShootingAngle > 0 && pMan->fShootingAngle < PI / 2) {
+                pMan->fShootingAngle = -PI / 2;
+            }
+        }
+    }
+
+    void aimRight(cMan *pMan, float secPerFrame) {
+        pMan->fShootingAngle += 1.0f * secPerFrame;
+        if (pMan->flipType != SDL_FLIP_NONE) {
+            if (pMan->fShootingAngle > PI / 2) {
+                pMan->fShootingAngle = -PI / 2;
+            }
+        } else {
+            if (pMan->fShootingAngle > PI) {
+                pMan->fShootingAngle = -PI;
+            } else if (pMan->fShootingAngle > -PI / 2 && pMan->fShootingAngle < 0) {
+                pMan->fShootingAngle = PI / 2;
+            }
+        }
+    }
+
+    void energize(float secPerFrame) {
+        fEnergyLevel += 0.75f * secPerFrame;
+        if (fEnergyLevel > 1.0f) {
+            fEnergyLevel = 1.0f;
+        }
+    }
+
     void onUserInputEvent(int eventType, int button, int mousePosX, int mousePosY, float secPerFrame) {
         if (!bPlayerHasControl) {
             return;
@@ -317,52 +397,17 @@ public:
                 if (pObjectUnderControl->bStable) {
                     cMan *pMan = dynamic_cast<cMan *>(pObjectUnderControl);
                     if (button == SDLK_RIGHT) {
-                        pMan->vx = 5.0f;
-                        pMan->vy = -5.0f;
-                        pMan->flipType = SDL_FLIP_HORIZONTAL;
-                        pMan->fShootingAngle = PI / 2;
-                        pMan->bStable = false;
+                        walkManRight(pMan);
                     } else if (button == SDLK_LEFT) {
-                        pMan->vx = -5.0f;
-                        pMan->vy = -5.0f;
-                        pMan->flipType = SDL_FLIP_NONE;
-                        pMan->fShootingAngle = PI / 2;
-                        pMan->bStable = false;
+                        walkManLeft(pMan);
                     } else if (button == SDLK_UP) {
-                        pObjectUnderControl->vx = 3.0f * (((cMan *) pObjectUnderControl)->flipType == SDL_FLIP_NONE ? -1.0f : 1.0f);
-                        pObjectUnderControl->vy = -15.0f;
+                        manJump(pMan);
                     } else if (button == SDLK_a) {
-                        pMan->fShootingAngle -= 1.0f * secPerFrame;
-                        if (pMan->flipType != SDL_FLIP_NONE) {
-                            if (pMan->fShootingAngle < -PI / 2) {
-                                pMan->fShootingAngle = PI / 2;
-                            }
-                        } else {
-                            if (pMan->fShootingAngle < -PI) {
-                                pMan->fShootingAngle = PI;
-                            } else if (pMan->fShootingAngle > 0 && pMan->fShootingAngle < PI / 2) {
-                                pMan->fShootingAngle = -PI / 2;
-                            }
-                        }
-
+                        aimLeft(pMan, secPerFrame);
                     } else if (button == SDLK_s) {
-                        pMan->fShootingAngle += 1.0f * secPerFrame;
-                        if (pMan->flipType != SDL_FLIP_NONE) {
-                            if (pMan->fShootingAngle > PI / 2) {
-                                pMan->fShootingAngle = -PI / 2;
-                            }
-                        } else {
-                            if (pMan->fShootingAngle > PI) {
-                                pMan->fShootingAngle = -PI;
-                            } else if (pMan->fShootingAngle > -PI / 2 && pMan->fShootingAngle < 0) {
-                                pMan->fShootingAngle = PI / 2;
-                            }
-                        }
+                        aimRight(pMan, secPerFrame);
                     } else if (button == SDLK_SPACE) {
-                        fEnergyLevel += 0.75f * secPerFrame;
-                        if (fEnergyLevel > 1.0f){
-                            fEnergyLevel = 1.0f;
-                        }
+                        energize(secPerFrame);
                     }
                 }
             }
@@ -387,7 +432,6 @@ public:
 
     bool onFrameUpdate(float fElapsedTime) override {
         switch (nGameState) {
-
             case GS_RESET: {
                 nNextState = GS_GENERATE_TERRAIN;
                 bPlayerHasControl = false;
@@ -416,7 +460,8 @@ public:
                     vecTeams.emplace_back(cTeam());
                     float fTeamMiddle = ((fSpacePerTeam) / 2.0f) + (t * fSpacePerTeam);
                     for (int w = 0; w < nMembersPerTeam; w++) {
-                        float fManX = fTeamMiddle - ((fSpacePerMember * (float) nMembersPerTeam) / 2) + w * fSpacePerMember;;
+                        float fManX =
+                                fTeamMiddle - ((fSpacePerMember * (float) nMembersPerTeam) / 2) + w * fSpacePerMember;;
                         float fManY = 0.0f;
 
                         // add members to teams
@@ -446,10 +491,10 @@ public:
             case GS_START_PLAY: {
                 bShowCountDown = true;
                 // clamp the players so that they don't walk off map
-                for(auto t: vecTeams){
-                    for(auto m : t.vecMembers){
-                        if(m->px < 5) m->px = 5;
-                        if(m->px > nMapWidth - 5) m->px = nMapWidth - 5;
+                for (auto t: vecTeams) {
+                    for (auto m: t.vecMembers) {
+                        if (m->px < 5) m->px = 5;
+                        if (m->px > nMapWidth - 5) m->px = nMapWidth - 5;
                     }
                 }
                 // if any player has gone off screen, bring him back
@@ -477,8 +522,8 @@ public:
                         bPlayerHasControl = true;
                         bComputerHasControl = false;
                     } else {
-                        bPlayerHasControl = true;
-                        bComputerHasControl = false;
+                        bPlayerHasControl = false;
+                        bComputerHasControl = true;
                     }
                     nNextState = GS_START_PLAY;
                     pObjectUnderControl = vecTeams[nCurrentTeam].getNextMember();
@@ -495,6 +540,132 @@ public:
             case GS_GAME_OVER: {
                 std::cout << "GAME OVER" << std::endl;
             }
+        }
+        if (bComputerHasControl) {
+            cMan *origin = nullptr;
+            switch (nAIState) {
+                case AI_ASSESS_ENVIRONMENT: {
+                    int nAction = rand() % 3;
+                    origin = (cMan *) pObjectUnderControl;
+                    if (nAction == 0) { // Move away from the team
+                        float fNearestAllyDistance = INFINITY;
+                        float fDirection = 0;
+
+                        for (auto w: vecTeams[nCurrentTeam].vecMembers) {
+                            fNearestAllyDistance = std::fabs(w->px - origin->px);
+                            fDirection = (w->px - origin->px) < 0 ? 1.0f : -1.0f;
+                        }
+                        if (fNearestAllyDistance < 50.0f) {
+                            fAISafePosition = origin->px + fDirection * 80.0f;
+                        } else {
+                            fAISafePosition = origin->px;
+                        }
+
+                    } else if (nAction == 1) {
+
+                        float fDirection = ((float) (nMapWidth / 2.0f) - origin->px) < 0.0f ? 1.0f : -1.0f;
+                        fAISafePosition = origin->px + fDirection * 200;
+                    } else if (nAction == 2) {
+                        origin = (cMan *) pObjectUnderControl;
+                        fAISafePosition = origin->px;
+                    }
+                    // clamp position
+                    if (fAISafePosition <= 20.0f) fAISafePosition = 20.0f;
+                    if (fAISafePosition >= nMapWidth - 20.0f) fAISafePosition = nMapWidth - 20.0f;
+
+                    nAINextState = AI_MOVE;
+                }
+                    break;
+                case AI_MOVE: {
+                    origin = (cMan *) pObjectUnderControl;
+                    if (fTurnTime >= 8.0f && std::abs(fAISafePosition - origin->px) > 1.0f) {
+                        if (bGameIsStable) {
+                            // walk towards the target
+                            if (fAISafePosition < origin->px) {
+                                bAI_Flipped = false;
+                            } else {
+                                bAI_Flipped = true;
+                            }
+                            bAI_Walk = true;
+                            nAINextState = AI_MOVE;
+                        }
+                    } else {
+                        nAINextState = AI_CHOOSE_TARGET;
+                    }
+                }
+                    break;
+                case AI_CHOOSE_TARGET: {
+                    bAI_Walk = false;
+                    bAI_Jump = false;
+                    origin = (cMan *) pObjectUnderControl;
+                    nCurrentTeam = origin->nTeam;
+                    int nTargetTeam = 0;
+                    do {
+                        nTargetTeam = rand() % vecTeams.size();
+                    } while (nTargetTeam == nCurrentTeam || !vecTeams[nTargetTeam].isTeamStillAlive());
+
+                    // aim for the healthiest opponent
+                    cMan *mostHealthy = vecTeams[nTargetTeam].vecMembers[0];
+                    for (auto w: vecTeams[nTargetTeam].vecMembers) {
+                        if (w->fHealth > mostHealthy->fHealth) {
+                            mostHealthy = w;
+                        }
+                    }
+                    pAITargetMan = mostHealthy;
+                    fAITargetX = pAITargetMan->px;
+                    fAITargetY = pAITargetMan->py;
+                    if (fAITargetX < origin->px){
+                        bAI_Flipped = false;
+                    } else {
+                        bAI_Flipped = true;
+                    }
+                    nAINextState = AI_POSITION_FOR_TARGET;
+                }
+                    break;
+
+                case AI_POSITION_FOR_TARGET: {
+                    origin = (cMan *) pObjectUnderControl;
+                    float dy = origin->py - fAITargetY;
+                    float dx = origin->px - fAITargetX;
+                    float fSpeed = 30.0f;
+                    float fGravity = 2.0f;
+                    bAI_Walk = false;
+                    bAI_Jump = false;
+                    float angle = fSpeed * fSpeed * fSpeed * fSpeed -
+                                  fGravity * (fGravity * dx * dx + 2.0f * dy * fSpeed * fSpeed);
+
+                    if (angle < 0 && bGameIsStable) { // target is out of range
+                        if (fTurnTime > 5) {
+                            // walk towards the target
+                            if (pAITargetMan->px < origin->px) {
+                                bAI_Flipped = false;
+                            } else {
+                                bAI_Flipped = true;
+                            }
+                            bAI_Walk = true;
+                            nAINextState = AI_POSITION_FOR_TARGET;
+                        }
+                    } else {
+                        // if still hasn't reached, maybe its stuck. Try jumping or firing the weapon
+//                        int nDecide = rand() % 2;
+
+                        bAI_Jump = true;
+                    }
+                }
+                    break;
+            }
+            if (origin != nullptr && origin->bStable) {
+                origin->flipType = bAI_Flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+                if (bAI_Walk && bAI_Flipped) {
+                    //TODO: if collision then jump otherwise walk
+                    walkManRight(origin);
+                } else if (bAI_Walk && !bAI_Flipped) {
+                    walkManLeft(origin);
+                } else if (bAI_Jump){
+                    manJump(origin);
+                }
+            }
+
         }
 
         fTurnTime -= fElapsedTime;
@@ -620,13 +791,13 @@ public:
             float dy = std::sin(pMan->fShootingAngle);
 
             // fire the weapon if the energy level is set to a specific value for 1 second
-            if (fEnergyLevel > 0.0f){
-                if( fEnergyLevel != fOldEnergyLevel){
+            if (fEnergyLevel > 0.0f) {
+                if (fEnergyLevel != fOldEnergyLevel) {
                     fOldEnergyLevel = fEnergyLevel;
                     fTimeSinceEnergyLevelSet = 0;
-                }else{
+                } else {
                     fTimeSinceEnergyLevelSet += fElapsedTime;
-                    if (fTimeSinceEnergyLevelSet > 1){
+                    if (fTimeSinceEnergyLevelSet > 1) {
                         bFireWeapon = true;
                     }
                 }
@@ -654,9 +825,9 @@ public:
             fillRect(cx, cy, 4, 4, {0xFF, 0, 0});
 
             // draw timer
-            if(bShowCountDown){
+            if (bShowCountDown) {
                 LTexture texture;
-                texture.loadTextureFromText(std::to_string( static_cast<int>(fTurnTime)), {0, 0, 0});
+                texture.loadTextureFromText(std::to_string(static_cast<int>(fTurnTime)), {0, 0, 0});
                 texture.drawTexture(3, 6);
             }
 
@@ -685,6 +856,7 @@ public:
             fillRect(4, 4, 10, 10, {0xFF, 0, 0});
         }
         nGameState = nNextState;
+        nAIState = nAINextState;
         return true;
     }
 
