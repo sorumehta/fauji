@@ -135,7 +135,7 @@ std::vector<std::pair<float, float>> cMissile::vecModel = DefineMissile();
 class cMan : public cPhysicsObject {
 public:
     SDL_RendererFlip flipType;
-    float fShootingAngle;
+    float fShootingAngle = 0.0f;
     float fHealth = 1.0f;
     bool bIsPlayable = true;
     int nTeam = 0;
@@ -614,7 +614,7 @@ public:
                     pAITargetMan = mostHealthy;
                     fAITargetX = pAITargetMan->px;
                     fAITargetY = pAITargetMan->py;
-                    if (fAITargetX < origin->px){
+                    if (fAITargetX < origin->px) {
                         bAI_Flipped = false;
                     } else {
                         bAI_Flipped = true;
@@ -631,28 +631,76 @@ public:
                     float fGravity = 2.0f;
                     bAI_Walk = false;
                     bAI_Jump = false;
-                    float angle = fSpeed * fSpeed * fSpeed * fSpeed -
+                    // taken from wiki article: https://en.wikipedia.org/wiki/Projectile_motion
+                    float a = fSpeed * fSpeed * fSpeed * fSpeed -
                                   fGravity * (fGravity * dx * dx + 2.0f * dy * fSpeed * fSpeed);
-
-                    if (angle < 0 && bGameIsStable) { // target is out of range
-                        if (fTurnTime > 5) {
-                            // walk towards the target
-                            if (pAITargetMan->px < origin->px) {
-                                bAI_Flipped = false;
+                    if(bGameIsStable) {
+                        if (a < 0) { // target is out of range
+                            if (fTurnTime > 7) {
+                                // walk towards the target
+                                if (pAITargetMan->px < origin->px) {
+                                    bAI_Flipped = false;
+                                } else {
+                                    bAI_Flipped = true;
+                                }
+                                bAI_Walk = true;
+                                nAINextState = AI_POSITION_FOR_TARGET;
+                            } else if (fTurnTime <= 7 && fTurnTime > 6) {
+                                // if still hasn't reached, maybe its stuck. Try jumping
+                                bAI_Jump = true;
+                                nAINextState = AI_POSITION_FOR_TARGET;
                             } else {
-                                bAI_Flipped = true;
+                                // fire from wherever you are
+                                fAITargetAngle = bAI_Flipped ? -(PI/2.0f) + (PI/4.0f) : -(PI/2.0f) - (PI/4.0f);
+                                fAITargetEnergy = 0.75f;
+                                nAINextState = AI_AIM;
                             }
-                            bAI_Walk = true;
-                            nAINextState = AI_POSITION_FOR_TARGET;
-                        }
-                    } else {
-                        // if still hasn't reached, maybe its stuck. Try jumping or firing the weapon
-//                        int nDecide = rand() % 2;
+                        } else { // target is in range
+                            // calculate the trajectory, based on wiki link given above
+                            float b1 = fSpeed * fSpeed + sqrtf(a);
+                            float b2 = fSpeed * fSpeed - sqrtf(a);
 
-                        bAI_Jump = true;
+                            float fTheta1 = atanf(b1 / (fGravity * dx)); // Max Height
+                            float fTheta2 = atanf(b2 / (fGravity * dx)); // Min Height
+
+                            // we'll use max as it has greater chance of avoiding obstacles
+                            fAITargetAngle = fTheta1 - (dx > 0 ? PI : 0.0f);
+                            fAITargetEnergy = 0.75f;
+                            nAINextState = AI_AIM;
+                        }
                     }
                 }
                     break;
+                case AI_AIM: {
+                    origin = (cMan *)pObjectUnderControl;
+                    bAI_Walk = false;
+                    bAI_Jump = false;
+
+                    if(origin->fShootingAngle < fAITargetAngle){
+                        bAI_AimRight = true;
+                    } else {
+                        bAI_AimLeft = true;
+                    }
+                    if(std::abs(origin->fShootingAngle - fAITargetAngle) < 0.1f){
+                        bAI_AimLeft = false;
+                        bAI_AimRight = false;
+                        fEnergyLevel = 0.0f;
+                        nAINextState = AI_FIRE;
+                    } else {
+                        nAINextState = AI_AIM;
+                    }
+                }
+                break;
+                case AI_FIRE: {
+                    origin = (cMan *)pObjectUnderControl;
+                    bAI_Energise = true;
+                    if(fEnergyLevel >= fAITargetEnergy){
+                        bAI_Energise = false;
+                        bComputerHasControl = false;
+                        nAINextState = AI_ASSESS_ENVIRONMENT;
+                    }
+                }
+                break;
             }
             if (origin != nullptr && origin->bStable) {
                 origin->flipType = bAI_Flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
@@ -661,8 +709,14 @@ public:
                     walkManRight(origin);
                 } else if (bAI_Walk && !bAI_Flipped) {
                     walkManLeft(origin);
-                } else if (bAI_Jump){
+                } else if (bAI_Jump) {
                     manJump(origin);
+                } else if(bAI_AimLeft){
+                    aimLeft(origin, fElapsedTime);
+                } else if(bAI_AimRight){
+                    aimRight(origin, fElapsedTime);
+                } else if(bAI_Energise){
+                    energize(fElapsedTime);
                 }
             }
 
@@ -773,7 +827,8 @@ public:
         // Draw landscape
         for (int y = 0; y < mWindowHeight; y++) {
             for (int x = 0; x < mWindowWidth; x++) {
-                float fMapVal = map[static_cast<int>(std::round((y + fCameraPosY) * nMapWidth + (x + fCameraPosX)))];
+                float fMapVal = map[static_cast<int>(std::round(
+                        (y + fCameraPosY) * nMapWidth + (x + fCameraPosX)))];
                 if (fMapVal == 0) {
                     drawPoint(x, y, {0x00, 0xFF, 0xFF});
                     // draw sky
