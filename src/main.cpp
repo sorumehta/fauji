@@ -538,7 +538,18 @@ public:
             }
                 break;
             case GS_GAME_OVER: {
-                std::cout << "GAME OVER" << std::endl;
+                bComputerHasControl = false;
+                bPlayerHasControl = false;
+                bShowCountDown = false;
+
+                LTexture texture;
+                std::string sGameOverMessage = "You won!";
+
+                if (nCurrentTeam != 0){
+                    sGameOverMessage = "You lost!";
+                }
+                texture.loadTextureFromText(sGameOverMessage, {0, 0, 0});
+                texture.drawTexture(300, 100);
             }
         }
         if (bComputerHasControl) {
@@ -600,10 +611,23 @@ public:
                     origin = (cMan *) pObjectUnderControl;
                     nCurrentTeam = origin->nTeam;
                     int nTargetTeam = 0;
-                    do {
-                        nTargetTeam = rand() % vecTeams.size();
-                    } while (nTargetTeam == nCurrentTeam || !vecTeams[nTargetTeam].isTeamStillAlive());
+                    int i = 0;
 
+                    for(i=0; i <= 5; i++){
+                        nTargetTeam = rand() % vecTeams.size();
+                        if(nTargetTeam != nCurrentTeam && vecTeams[nTargetTeam].isTeamStillAlive()){
+                            break;
+                        }
+                    }
+                    if(i > 5){
+                        do {
+                            nTargetTeam++;
+                            nTargetTeam %= vecTeams.size();
+                        } while (!vecTeams[nCurrentTeam].isTeamStillAlive());
+                        if(nTargetTeam == nCurrentTeam){
+                            nNextState = GS_GAME_OVER;
+                        }
+                    }
                     // aim for the healthiest opponent
                     cMan *mostHealthy = vecTeams[nTargetTeam].vecMembers[0];
                     for (auto w: vecTeams[nTargetTeam].vecMembers) {
@@ -907,9 +931,9 @@ public:
                 break;
             }
         }
-        if (bGameIsStable) {
-            fillRect(4, 4, 10, 10, {0xFF, 0, 0});
-        }
+//        if (bGameIsStable) {
+//            fillRect(4, 4, 10, 10, {0xFF, 0, 0});
+//        }
         nGameState = nNextState;
         nAIState = nAINextState;
         return true;
