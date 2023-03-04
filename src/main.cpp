@@ -141,6 +141,7 @@ public:
     bool bIsPlayable = true;
     int nTeam = 0;
     static LTexture *spritePtr; // shared across instances
+    static LTexture *tombSpritePtr;
     SDL_Rect spriteClips[4];
     int frame;
 
@@ -178,6 +179,10 @@ public:
             spritePtr = new LTexture();
             spritePtr->loadTextureFromFile("../res/foo.png");
         }
+        if (tombSpritePtr == nullptr) {
+            tombSpritePtr = new LTexture();
+            tombSpritePtr->loadTextureFromFile("../res/tomb-removebg.png");
+        }
     }
 
     virtual bool Damage(float d) // Reduce worm's health by said amount
@@ -198,6 +203,7 @@ public:
 };
 
 LTexture *cMan::spritePtr = nullptr;
+LTexture *cMan::tombSpritePtr = nullptr;
 
 void cMan::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
     if (bIsPlayable) {
@@ -214,18 +220,22 @@ void cMan::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
         if (frame / 2 >= 4) {
             frame = 0;
         }
+        Color healthColor = {};
+        if (  nTeam == 0 ){
+            healthColor = {0, 0, 0xFF};
+        } else {
+            healthColor = {0xFF, 0, 0};
+        }
 
         // draw health bar
         for (int i = 0; i < 22 * fHealth; i++) {
-            engine->drawPoint(px - 5 + i - fOffsetX, py - 20 - fOffsetY, {0, 0, 0xFF});
-            engine->drawPoint(px - 5 + i - fOffsetX, py - 21 - fOffsetY, {0, 0, 0xFF});
-            engine->drawPoint(px - 5 + i - fOffsetX, py - 22 - fOffsetY, {0, 0, 0xFF});
-            engine->drawPoint(px - 5 + i - fOffsetX, py - 23 - fOffsetY, {0, 0, 0xFF});
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 20 - fOffsetY, healthColor);
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 21 - fOffsetY, healthColor);
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 22 - fOffsetY, healthColor);
+            engine->drawPoint(px - 5 + i - fOffsetX, py - 23 - fOffsetY, healthColor);
         }
     } else {
-        // TODO: draw gravestone texture;
-//        spritePtr = new LTexture();
-//        spritePtr->loadTextureFromFile("../res/foo.png");
+        tombSpritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius, radius * 2, radius * 2);
     }
 
 }
@@ -234,43 +244,6 @@ int cMan::ObjDeadAction() {
     return 0;
 }
 
-class cEnemy : public cMan {
-public:
-    cEnemy(float x, float y): cMan(x, y) {}
-    void draw(GameEngine *engine, float fOffsetX, float fOffsetY) override;
-};
-
-
-void cEnemy::draw(GameEngine *engine, float fOffsetX, float fOffsetY) {
-    if (bIsPlayable) {
-        SDL_Rect *currentClip = nullptr;
-        if (std::abs(vx) > 4 && std::abs(vx) < 6) {
-            currentClip = &spriteClips[frame / 2];
-        } else {
-            currentClip = &spriteClips[0];
-        }
-        spritePtr->drawTexture(px - fOffsetX - radius, py - fOffsetY - radius, radius * 2, radius * 2, currentClip, 0,
-                               NULL,
-                               flipType);
-        frame++;
-        if (frame / 2 >= 4) {
-            frame = 0;
-        }
-
-        // draw health bar
-        for (int i = 0; i < 22 * fHealth; i++) {
-            engine->drawPoint(px - 5 + i - fOffsetX, py - 20 - fOffsetY, {0xFF, 0, 0});
-            engine->drawPoint(px - 5 + i - fOffsetX, py - 21 - fOffsetY, {0xFF, 0, 0});
-            engine->drawPoint(px - 5 + i - fOffsetX, py - 22 - fOffsetY, {0xFF, 0, 0});
-            engine->drawPoint(px - 5 + i - fOffsetX, py - 23 - fOffsetY, {0xFF, 0, 0});
-        }
-    } else {
-        // TODO: draw gravestone texture;
-//        spritePtr = new LTexture();
-//        spritePtr->loadTextureFromFile("../res/foo.png");
-    }
-
-}
 class cTeam {
 public:
     std::vector<cMan *> vecMembers;
@@ -339,16 +312,6 @@ public:
         if (!bPlayerHasControl) {
             return;
         }
-//        if (eventType == SDL_MOUSEBUTTONDOWN) {
-//            if (button == SDL_BUTTON_RIGHT) {
-//                listObjects.push_back(std::make_unique<cMissile>(mousePosX + fCameraPosX, mousePosY + fCameraPosY));
-//            } else if (button == SDL_BUTTON_LEFT) {
-//                cMan *man = new cMan(mousePosX + fCameraPosX, mousePosY + fCameraPosY);
-//                pObjectUnderControl = man;
-//                pCameraTrackingObject = man;
-//                listObjects.push_back(std::unique_ptr<cMan>(man));
-//            }
-//        }
         if (eventType == SDL_KEYDOWN) {
             if (pObjectUnderControl != nullptr) {
                 if (pObjectUnderControl->bStable) {
@@ -457,12 +420,7 @@ public:
                         float fManY = 0.0f;
 
                         // add members to teams
-                        cMan *man = nullptr;
-                        if(t == 0){
-                            man = new cMan(fManX, fManY);
-                        } else{
-                            man = new cEnemy(fManX, fManY);
-                        }
+                        cMan *man = new cMan(fManX, fManY);
                         man->nTeam = t;
                         listObjects.push_back(std::unique_ptr<cMan>(man));
                         vecTeams[t].vecMembers.push_back(man);
