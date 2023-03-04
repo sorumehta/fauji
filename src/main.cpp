@@ -177,7 +177,7 @@ public:
         fShootingAngle = flipType == SDL_FLIP_NONE ? -PI : PI;
         if (spritePtr == nullptr) {
             spritePtr = new LTexture();
-            spritePtr->loadTextureFromFile("../res/foo.png");
+            spritePtr->loadTextureFromFile("../res/man.png");
         }
         if (tombSpritePtr == nullptr) {
             tombSpritePtr = new LTexture();
