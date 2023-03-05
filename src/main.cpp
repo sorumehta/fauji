@@ -308,7 +308,8 @@ private:
     cMan *pAITargetMan = nullptr;        // Pointer to worm AI has selected as target
     float fAITargetX = 0.0f;            // Coordinates of target missile location
     float fAITargetY = 0.0f;
-
+    LTexture scoreTexture;
+    LTexture gameOverTexture;
     enum GAME_STATE {
         GS_RESET = 0,
         GS_GENERATE_TERRAIN = 1,
@@ -542,14 +543,14 @@ public:
                 bPlayerHasControl = false;
                 bShowCountDown = false;
 
-                LTexture texture;
+
                 std::string sGameOverMessage = "You won!";
 
                 if (nCurrentTeam != 0){
                     sGameOverMessage = "You lost!";
                 }
-                texture.loadTextureFromText(sGameOverMessage, {0, 0, 0});
-                texture.drawTexture(300, 100);
+                gameOverTexture.loadTextureFromText(sGameOverMessage, {0xFF, 0xFF, 0xFF});
+                gameOverTexture.drawTexture(250, 100);
             }
         }
         if (bComputerHasControl) {
@@ -589,7 +590,7 @@ public:
                     break;
                 case AI_MOVE: {
                     origin = (cMan *) pObjectUnderControl;
-                    if (fTurnTime >= 8.0f && std::abs(fAISafePosition - origin->px) > 1.0f) {
+                    if (fTurnTime >= 9.0f && std::abs(fAISafePosition - origin->px) > 1.0f) {
                         if (bGameIsStable) {
                             // walk towards the target
                             if (fAISafePosition < origin->px) {
@@ -600,7 +601,11 @@ public:
                             bAI_Walk = true;
                             nAINextState = AI_MOVE;
                         }
-                    } else {
+                    } else if(fTurnTime < 9.0f && fTurnTime >= 8.0f && std::abs(fAISafePosition - origin->px) > 1.0f) {
+                        bAI_Walk = false;
+                        bAI_Jump = true;
+                    }
+                    else {
                         nAINextState = AI_CHOOSE_TARGET;
                     }
                 }
@@ -705,7 +710,7 @@ public:
                     } else {
                         bAI_AimLeft = true;
                     }
-                    if(std::abs(origin->fShootingAngle - fAITargetAngle) < 0.1f){
+                    if(std::abs(origin->fShootingAngle - fAITargetAngle) < 0.05f){
                         bAI_AimLeft = false;
                         bAI_AimRight = false;
                         fEnergyLevel = 0.0f;
@@ -905,9 +910,9 @@ public:
 
             // draw timer
             if (bShowCountDown) {
-                LTexture texture;
-                texture.loadTextureFromText(std::to_string(static_cast<int>(fTurnTime)), {0, 0, 0});
-                texture.drawTexture(3, 6);
+
+                scoreTexture.loadTextureFromText(std::to_string(static_cast<int>(fTurnTime)), {0, 0, 0});
+                scoreTexture.drawTexture(3, 6);
             }
 
             // draw energy bar
