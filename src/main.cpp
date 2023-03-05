@@ -283,6 +283,9 @@ private:
     float fOldEnergyLevel = 0;
     bool bFireWeapon = false;
     bool bShowCountDown = false;
+    bool bShowNukeAnimation = false;
+    int planePosX = 0;
+    LTexture planeTexture;
     float fTurnTime = 0.0f;
     bool bGameIsStable = false;
     bool bPlayerHasControl = false;
@@ -318,7 +321,8 @@ private:
         GS_START_PLAY,
         GS_CAMERA_MODE,
         GS_GAME_OVER,
-        GS_NUKE
+        GS_NUKE,
+        GS_GAME_OVER2
     } nGameState, nNextState;
 
     enum AI_STATE {
@@ -430,6 +434,7 @@ public:
         // music: Battle Of The Dragons by TommyMutiu from Pixabay
         loadMusic("../res/battle-of-the-dragons.mp3");
         playMusic();
+        planeTexture.loadTextureFromFile("../res/fighter-jet.png");
         return true;
     }
 
@@ -546,16 +551,10 @@ public:
                 bPlayerHasControl = false;
                 bShowCountDown = false;
                 if (nCurrentTeam == 0){
-                    gameOverMessage = "The battle is won ";
+                    gameOverMessage = "Good job soldier, you saved us a nuke bomb!";
                 }
                 else {
                     gameOverMessage = "The battle is lost. Executing Plan B (nuke) ...";
-                    for (int i = 0; i < 100; i ++)
-                    {
-                        int nBombX = rand() % nMapWidth;
-                        int nBombY = rand() % (nMapHeight / 2);
-                        listObjects.push_back(std::unique_ptr<cMissile>(new cMissile(nBombX, nBombY, 0.0f, 0.5f)));
-                    }
 
                     nNextState = GS_NUKE;
                 }
@@ -565,9 +564,22 @@ public:
                 bComputerHasControl = false;
                 bPlayerHasControl = false;
                 bShowCountDown = false;
-
+                bShowNukeAnimation = true;
+                for (int i = 0; i < 100; i ++)
+                {
+                    int nBombX = rand() % nMapWidth;
+                    int nBombY = rand() % (nMapHeight / 2);
+                    listObjects.push_back(std::unique_ptr<cMissile>(new cMissile(nBombX, nBombY, 0.0f, 0.5f)));
+                }
+                for (auto t : vecTeams[nCurrentTeam].vecMembers){
+                    t->fHealth = 0.0f;
+                }
+                nNextState = GS_GAME_OVER2;
             }
-            break;
+                break;
+            case GS_GAME_OVER2: {
+            }
+                break;
         }
 
         if (bComputerHasControl) {
@@ -936,7 +948,14 @@ public:
                 gameOverTexture.loadTextureFromText(gameOverMessage, {0, 0, 0});
                 gameOverTexture.drawTexture((mWindowWidth/2 - gameOverTexture.getWidth())/2, mWindowHeight/2 - 20);
             }
+            if(bShowNukeAnimation){
+                planeTexture.drawTexture(planePosX, 40, planeTexture.getWidth()/4.0f, planeTexture.getHeight()/4.0f);
+                planePosX += 10;
+                if(planePosX > mWindowWidth - 10){
+                    bShowNukeAnimation = false;
+                }
 
+            }
             // draw energy bar
             for (int i = 0; i < 22 * fEnergyLevel; i++) {
                 drawPoint(pMan->px - 5 + i - fCameraPosX, pMan->py + 20 - fCameraPosY, {0xFF, 0, 0xFF});

@@ -174,7 +174,7 @@ bool GameEngine::constructConsole(int windowWidth = 80, int windowHeight = 40, c
 }
 
 bool GameEngine::createResources() {
-    gFont = TTF_OpenFont("../res/Panoptica Regular.ttf", FONT_SIZE);
+    gFont = TTF_OpenFont("../res/Roboto-Black.ttf", FONT_SIZE);
     if (gFont == nullptr) {
         std::cout << "Failed to load font! SDL_ttf Error: " << TTF_GetError();
         return false;
