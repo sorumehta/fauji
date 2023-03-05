@@ -136,7 +136,7 @@ class cMan : public cPhysicsObject {
 public:
     SDL_RendererFlip flipType;
     float fShootingAngle = 0.0f;
-    float fHealth = 0.2f;
+    float fHealth = 1.0f;
     bool bIsPlayable = true;
     int nTeam = 0;
     static LTexture *spritePtr; // shared across instances
@@ -308,6 +308,7 @@ private:
     cMan *pAITargetMan = nullptr;        // Pointer to worm AI has selected as target
     float fAITargetX = 0.0f;            // Coordinates of target missile location
     float fAITargetY = 0.0f;
+    std::string gameOverMessage;
     enum GAME_STATE {
         GS_RESET = 0,
         GS_GENERATE_TERRAIN = 1,
@@ -316,7 +317,8 @@ private:
         GS_ALLOCATING_UNITS,
         GS_START_PLAY,
         GS_CAMERA_MODE,
-        GS_GAME_OVER
+        GS_GAME_OVER,
+        GS_NUKE
     } nGameState, nNextState;
 
     enum AI_STATE {
@@ -543,8 +545,29 @@ public:
                 bComputerHasControl = false;
                 bPlayerHasControl = false;
                 bShowCountDown = false;
+                if (nCurrentTeam == 0){
+                    gameOverMessage = "The battle is won ";
+                }
+                else {
+                    gameOverMessage = "The battle is lost. Executing Plan B (nuke) ...";
+                    for (int i = 0; i < 100; i ++)
+                    {
+                        int nBombX = rand() % nMapWidth;
+                        int nBombY = rand() % (nMapHeight / 2);
+                        listObjects.push_back(std::unique_ptr<cMissile>(new cMissile(nBombX, nBombY, 0.0f, 0.5f)));
+                    }
+
+                    nNextState = GS_NUKE;
+                }
+            }
+            break;
+            case GS_NUKE: {
+                bComputerHasControl = false;
+                bPlayerHasControl = false;
+                bShowCountDown = false;
 
             }
+            break;
         }
 
         if (bComputerHasControl) {
@@ -704,7 +727,7 @@ public:
                     } else {
                         bAI_AimLeft = true;
                     }
-                    if(std::abs(origin->fShootingAngle - fAITargetAngle) < 0.1f){
+                    if(std::abs(origin->fShootingAngle - fAITargetAngle) < 0.075f){
                         bAI_AimLeft = false;
                         bAI_AimRight = false;
                         fEnergyLevel = 0.0f;
@@ -908,6 +931,11 @@ public:
                 timerTexture.loadTextureFromText(std::to_string(static_cast<int>(fTurnTime)), {0, 0, 0});
                 timerTexture.drawTexture(3, 6);
             }
+            if(gameOverMessage.length() != 0){
+                LTexture gameOverTexture;
+                gameOverTexture.loadTextureFromText(gameOverMessage, {0, 0, 0});
+                gameOverTexture.drawTexture((mWindowWidth/2 - gameOverTexture.getWidth())/2, mWindowHeight/2 - 20);
+            }
 
             // draw energy bar
             for (int i = 0; i < 22 * fEnergyLevel; i++) {
@@ -1037,6 +1065,8 @@ public:
             fOutput[x] = fNoise / fScaleAcc;
         }
     }
+
+
 };
 
 int main() {
