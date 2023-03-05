@@ -7,6 +7,8 @@ const int FONT_SIZE = 18;
 
 SDL_Renderer *gRenderer = nullptr;
 TTF_Font *gFont = NULL;
+//The music that will be played
+Mix_Music *gMusic = NULL;
 
 LTexture::LTexture() {
     mTexture = nullptr;
@@ -114,7 +116,7 @@ bool LTexture::loadTextureFromFile(std::string path) {
 
 
 GameEngine::GameEngine() : mWindowWidth(80), mWindowHeight(40), gWindow(nullptr) {
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         std::cout << "SDL initialization failed: " << SDL_GetError();
     }
     // initialise font loading
@@ -126,6 +128,14 @@ GameEngine::GameEngine() : mWindowWidth(80), mWindowHeight(40), gWindow(nullptr)
     int imgFlags = IMG_INIT_PNG;
     if (!(IMG_Init(imgFlags) & imgFlags)) {
         std::cout << "SDL_image could not initialize! SDL_image Error: \n" << IMG_GetError() << std::endl;
+        return;
+    }
+
+    //Initialize SDL_mixer
+    if( Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 2048 ) < 0 )
+    {
+        std::cout <<"SDL_mixer could not initialize! SDL_mixer Error: %s\n" << Mix_GetError() << std::endl;
+
     }
 }
 
@@ -172,6 +182,17 @@ bool GameEngine::createResources() {
     return true;
 }
 
+
+bool GameEngine::loadMusic(const char *path) {
+    gMusic = Mix_LoadMUS( path);
+    if (gMusic == NULL) {
+        std::cout << "Failed to load beat music! SDL_mixer Error: %s\n" << Mix_GetError() << std::endl;
+        return false;
+    }
+    return true;
+}
+
+
 bool GameEngine::renderConsole() {
     if (gRenderer == nullptr) {
         std::cout << "Renderer is not initialised. Perhaps you forgot to call constructConsole?" << std::endl;
@@ -208,7 +229,9 @@ bool GameEngine::fillRect(int x, int y, int w, int h, Color color) {
 }
 
 void GameEngine::close_sdl() {
-
+    //Free the music
+    Mix_FreeMusic( gMusic );
+    gMusic = NULL;
     //Destroy window
     SDL_DestroyRenderer(gRenderer);
     SDL_DestroyWindow(gWindow);
@@ -329,6 +352,18 @@ void GameEngine::DrawWireFrameModel(const std::vector<std::pair<float, float>> &
                  static_cast<int>(std::round(vecTransformedCoordinates[j % verts].first)),
                  static_cast<int>(std::round(vecTransformedCoordinates[j % verts].second)), color);
     }
+}
+
+bool GameEngine::playMusic() {
+    if( Mix_PlayingMusic() == 0 )
+    {
+        //Play the music
+        Mix_PlayMusic( gMusic, -1 );
+    }
+}
+
+bool GameEngine::stopMusic() {
+    Mix_HaltMusic();
 }
 
 void InputEventHandler::addCallback(const std::string &cb_name, const KeyEventFuncPtr &fn) {

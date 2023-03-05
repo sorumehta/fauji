@@ -136,7 +136,7 @@ class cMan : public cPhysicsObject {
 public:
     SDL_RendererFlip flipType;
     float fShootingAngle = 0.0f;
-    float fHealth = 1.0f;
+    float fHealth = 0.2f;
     bool bIsPlayable = true;
     int nTeam = 0;
     static LTexture *spritePtr; // shared across instances
@@ -308,8 +308,6 @@ private:
     cMan *pAITargetMan = nullptr;        // Pointer to worm AI has selected as target
     float fAITargetX = 0.0f;            // Coordinates of target missile location
     float fAITargetY = 0.0f;
-    LTexture scoreTexture;
-    LTexture gameOverTexture;
     enum GAME_STATE {
         GS_RESET = 0,
         GS_GENERATE_TERRAIN = 1,
@@ -427,6 +425,9 @@ public:
         InputEventHandler::addCallback("onUserInputFn_Game", onUserInputFn);
         nGameState = GS_RESET;
         nNextState = GS_RESET;
+        // music: Battle Of The Dragons by TommyMutiu from Pixabay
+        loadMusic("../res/battle-of-the-dragons.mp3");
+        playMusic();
         return true;
     }
 
@@ -543,16 +544,9 @@ public:
                 bPlayerHasControl = false;
                 bShowCountDown = false;
 
-
-                std::string sGameOverMessage = "You won!";
-
-                if (nCurrentTeam != 0){
-                    sGameOverMessage = "You lost!";
-                }
-                gameOverTexture.loadTextureFromText(sGameOverMessage, {0xFF, 0xFF, 0xFF});
-                gameOverTexture.drawTexture(250, 100);
             }
         }
+
         if (bComputerHasControl) {
             cMan *origin = nullptr;
             switch (nAIState) {
@@ -590,7 +584,7 @@ public:
                     break;
                 case AI_MOVE: {
                     origin = (cMan *) pObjectUnderControl;
-                    if (fTurnTime >= 9.0f && std::abs(fAISafePosition - origin->px) > 1.0f) {
+                    if (fTurnTime >= 10.0f && std::abs(fAISafePosition - origin->px) > 1.0f) {
                         if (bGameIsStable) {
                             // walk towards the target
                             if (fAISafePosition < origin->px) {
@@ -601,7 +595,7 @@ public:
                             bAI_Walk = true;
                             nAINextState = AI_MOVE;
                         }
-                    } else if(fTurnTime < 9.0f && fTurnTime >= 8.0f && std::abs(fAISafePosition - origin->px) > 1.0f) {
+                    } else if(fTurnTime < 10.0f && fTurnTime >= 9.0f && std::abs(fAISafePosition - origin->px) > 1.0f) {
                         bAI_Walk = false;
                         bAI_Jump = true;
                     }
@@ -710,7 +704,7 @@ public:
                     } else {
                         bAI_AimLeft = true;
                     }
-                    if(std::abs(origin->fShootingAngle - fAITargetAngle) < 0.05f){
+                    if(std::abs(origin->fShootingAngle - fAITargetAngle) < 0.1f){
                         bAI_AimLeft = false;
                         bAI_AimRight = false;
                         fEnergyLevel = 0.0f;
@@ -910,9 +904,9 @@ public:
 
             // draw timer
             if (bShowCountDown) {
-
-                scoreTexture.loadTextureFromText(std::to_string(static_cast<int>(fTurnTime)), {0, 0, 0});
-                scoreTexture.drawTexture(3, 6);
+                LTexture timerTexture;
+                timerTexture.loadTextureFromText(std::to_string(static_cast<int>(fTurnTime)), {0, 0, 0});
+                timerTexture.drawTexture(3, 6);
             }
 
             // draw energy bar

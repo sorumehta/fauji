@@ -3,6 +3,7 @@
 #include <SDL.h>
 #include <SDL_ttf.h>
 #include <SDL_image.h>
+#include <SDL_mixer.h>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -89,6 +90,10 @@ public:
 
     void startGameLoop();
 
+    bool loadMusic(const char *path);
+
+    bool playMusic();
+    bool stopMusic();
     void close_sdl();
 
     ~GameEngine();
